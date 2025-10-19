@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "361344460853",
+    "project_id": "saborly",
+    "storage_bucket": "saborly.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:361344460853:android:e2b3302fee15cce47c697c",
+        "android_client_info": {
+          "package_name": "com.example.soely"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRIokAyUDhvVYwhT1crAbS0d0bb3mkw1U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
