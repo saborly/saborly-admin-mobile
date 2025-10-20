@@ -8,7 +8,7 @@ class ApiService {
 
   final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: 'https://soleybackend.vercel.app/api/v1',
+      baseUrl: 'https://saborly-backend.vercel.app/api/v1',
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
       headers: {
