@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:saborlyadmin/models/order.dart';
+import 'package:Saborly_admin/models/order.dart';
 
 class OrderStreamService {
   static final OrderStreamService instance = OrderStreamService._();

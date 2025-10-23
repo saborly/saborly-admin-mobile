@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:saborlyadmin/screens/auth.dart';
+import 'package:Saborly_admin/screens/auth.dart';
 
-import 'package:saborlyadmin/services/api_service.dart';
+import 'package:Saborly_admin/services/api_service.dart';
 
 // Add this widget to your OrdersDashboardScreen AppBar
 class ProfileMenuWidget extends StatelessWidget {

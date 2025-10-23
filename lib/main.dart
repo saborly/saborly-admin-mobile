@@ -3,13 +3,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:saborlyadmin/firebase_options.dart';
-import 'package:saborlyadmin/screens/auth.dart';
-
-import 'package:saborlyadmin/screens/orders_dashboard_screen.dart';
-import 'package:saborlyadmin/services/api_service.dart';
-import 'package:saborlyadmin/services/firebase_messaging_service.dart';
-import 'package:saborlyadmin/services/order_provider.dart';
+import 'package:Saborly_admin/firebase_options.dart';
+import 'package:Saborly_admin/screens/auth.dart';
+import 'package:Saborly_admin/screens/orders_dashboard_screen.dart';
+import 'package:Saborly_admin/services/api_service.dart';
+import 'package:Saborly_admin/services/firebase_messaging_service.dart';
+import 'package:Saborly_admin/services/order_provider.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -21,10 +20,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Firebase
-    await Firebase.initializeApp(
+  await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
-  );  
-  // I
+  );
+  
   // Initialize Firebase Messaging
   await FirebaseMessagingService.initialize();
   
@@ -35,29 +34,83 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
   // Get and save FCM token
-  final fcmToken = await FirebaseMessagingService.getToken();
-  if (fcmToken != null) {
-    print('📱 FCM Token: $fcmToken');
+  await _initializeFCMToken();
+  
+  runApp(const MyApp());
+}
+
+Future<void> _initializeFCMToken() async {
+  try {
+    // Get current FCM token
+    final fcmToken = await FirebaseMessagingService.getToken();
     
-    // Check if user is logged in
+    if (fcmToken == null) {
+      print('❌ Failed to get FCM token');
+      return;
+    }
+    
+    print('📱 Current FCM Token: $fcmToken');
+    
+    // Get stored token
     final prefs = await SharedPreferences.getInstance();
+    final storedToken = prefs.getString('fcm_token');
     final authToken = prefs.getString('auth_token');
     
+    // Check if token has changed
+    final tokenChanged = storedToken != fcmToken;
+    
+    if (tokenChanged) {
+      print('🔄 FCM Token changed or new');
+      print('📱 Old Token: $storedToken');
+      print('📱 New Token: $fcmToken');
+    }
+    
+    // Save token locally first
+    await prefs.setString('fcm_token', fcmToken);
+    
+    // If user is logged in, update token on backend
     if (authToken != null) {
-      // Save FCM token to backend if logged in
       try {
+        print('🔄 User is logged in, updating FCM token on backend...');
+        
         await ApiService.instance.updateFCMToken(
           fcmToken: fcmToken,
-          platform: 'android', // or 'ios', 'web'
+          platform: 'android',
         );
+        
         print('✅ FCM token saved to backend');
       } catch (e) {
         print('❌ Error saving FCM token: $e');
       }
+    } else {
+      print('ℹ️ User not logged in, token will be saved after login');
     }
+    
+    // Listen for token refresh
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+      print('🔄 FCM Token refreshed: $newToken');
+      
+      // Save new token locally
+      await prefs.setString('fcm_token', newToken);
+      
+      // Update on backend if logged in
+      final currentAuthToken = prefs.getString('auth_token');
+      if (currentAuthToken != null) {
+        try {
+          await ApiService.instance.updateFCMToken(
+            fcmToken: newToken,
+            platform: 'android',
+          );
+          print('✅ New FCM token updated on backend');
+        } catch (e) {
+          print('❌ Error updating refreshed FCM token: $e');
+        }
+      }
+    });
+    
+  } catch (e) {
+    print('❌ Error initializing FCM token: $e');
   }
-  
-  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -136,12 +189,28 @@ class _SplashScreenState extends State<SplashScreen> {
         try {
           await ApiService.instance.getProfile();
           
+          // Re-sync FCM token after successful auth verification
+          final fcmToken = prefs.getString('fcm_token');
+          if (fcmToken != null) {
+            try {
+              print('🔄 Re-syncing FCM token with backend...');
+              await ApiService.instance.updateFCMToken(
+                fcmToken: fcmToken,
+                platform: 'android',
+              );
+              print('✅ FCM token re-synced successfully');
+            } catch (e) {
+              print('❌ Error re-syncing FCM token: $e');
+            }
+          }
+          
           // Token is valid, go to dashboard
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const OrdersDashboardScreen()),
           );
         } catch (e) {
           // Token is invalid, clear it and go to login
+          print('❌ Auth token invalid: $e');
           await prefs.clear();
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
@@ -196,7 +265,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 32),
               const Text(
-                'Saborly Food Kitchen', 
+                'Saborly Food Kitchen',
                 style: TextStyle(
                   fontSize: 36,
                   fontWeight: FontWeight.bold,

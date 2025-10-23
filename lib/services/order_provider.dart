@@ -1,7 +1,9 @@
 // providers/order_provider.dart
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
-import 'package:saborlyadmin/services/api_service.dart';
-import 'package:saborlyadmin/services/order_print_service.dart';
+import 'package:Saborly_admin/services/api_service.dart';
+import 'package:Saborly_admin/services/order_print_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class OrderProvider with ChangeNotifier {
@@ -11,20 +13,26 @@ class OrderProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   
-  // Auto-print settings
   bool _autoPrintEnabled = true;
   bool _autoAcceptEnabled = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   List<Map<String, dynamic>> get orders => _orders;
+
   Map<String, int> get statusCounts => _statusCounts;
+
   Map<String, List<Map<String, dynamic>>> get ordersByStatus => _ordersByStatus;
+
+
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get autoPrintEnabled => _autoPrintEnabled;
   bool get autoAcceptEnabled => _autoAcceptEnabled;
 
   List<Map<String, dynamic>> getOrdersByStatus(String status) {
+    print('Status Counts: ${jsonEncode(statusCounts)}');
+print('Orders by Status: ${jsonEncode(ordersByStatus)}');
+
     return _ordersByStatus[status] ?? [];
   }
 
@@ -32,7 +40,6 @@ class OrderProvider with ChangeNotifier {
     return _statusCounts[status] ?? 0;
   }
 
-  // Toggle settings
   void toggleAutoPrint(bool value) {
     _autoPrintEnabled = value;
     notifyListeners();
@@ -43,7 +50,6 @@ class OrderProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Load all orders
   Future<void> loadOrders({String? status}) async {
     _isLoading = true;
     _error = null;
@@ -63,7 +69,6 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  // Load order details
   Future<Map<String, dynamic>?> loadOrderDetails(String orderId) async {
     try {
       return await ApiService.instance.getOrderDetails(orderId);
@@ -73,7 +78,6 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  // Update order status
   Future<bool> updateOrderStatus(String orderId, String newStatus) async {
     try {
       await ApiService.instance.updateOrderStatus(
@@ -81,7 +85,6 @@ class OrderProvider with ChangeNotifier {
         status: newStatus,
       );
 
-      // Update local order
       final index = _orders.indexWhere((o) => o['_id'] == orderId);
       if (index != -1) {
         _orders[index]['status'] = newStatus;
@@ -96,9 +99,42 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  // Add new order with auto-actions
+  // Enhanced addNewOrder with proper data handling
   Future<void> addNewOrder(Map<String, dynamic> order) async {
-    _orders.insert(0, order);
+    debugPrint('📦 Received new order: ${order['orderNumber']}');
+    
+    // Check if order data is complete
+    bool needsFullData = false;
+    
+    if (order['userId'] == null || order['userId'] is! Map) {
+      debugPrint('⚠️ Incomplete userId data in notification');
+      needsFullData = true;
+    }
+    
+    if (order['items'] == null || 
+        (order['items'] is List && (order['items'] as List).isEmpty)) {
+      debugPrint('⚠️ Incomplete items data in notification');
+      needsFullData = true;
+    }
+
+    // If data is incomplete, fetch full order details
+    Map<String, dynamic> completeOrder = order;
+    if (needsFullData && order['_id'] != null) {
+      debugPrint('🔄 Fetching complete order data...');
+      try {
+        final fullOrder = await ApiService.instance.getOrderDetails(order['_id']);
+        if (fullOrder != null) {
+          completeOrder = fullOrder;
+          debugPrint('✅ Got complete order data');
+        } else {
+          debugPrint('❌ Could not fetch complete order data');
+        }
+      } catch (e) {
+        debugPrint('❌ Error fetching complete order: $e');
+      }
+    }
+
+    _orders.insert(0, completeOrder);
     _organizeOrders();
     notifyListeners();
 
@@ -108,22 +144,22 @@ class OrderProvider with ChangeNotifier {
     // Auto-print if enabled
     if (_autoPrintEnabled) {
       try {
-        await OrderPrintService.printOrder(order);
-        debugPrint('✅ Auto-printed order: ${order['orderNumber']}');
+        debugPrint('🖨️ Auto-printing order: ${completeOrder['orderNumber']}');
+        await OrderPrintService.printOrder(completeOrder);
+        debugPrint('✅ Auto-printed order: ${completeOrder['orderNumber']}');
       } catch (e) {
         debugPrint('❌ Auto-print failed: $e');
       }
     }
 
     // Auto-accept if enabled
-    if (_autoAcceptEnabled && order['status'] == 'pending') {
+    if (_autoAcceptEnabled && completeOrder['status'] == 'pending') {
       await Future.delayed(const Duration(seconds: 2));
-      await updateOrderStatus(order['_id'], 'confirmed');
-      debugPrint('✅ Auto-accepted order: ${order['orderNumber']}');
+      await updateOrderStatus(completeOrder['_id'], 'confirmed');
+      debugPrint('✅ Auto-accepted order: ${completeOrder['orderNumber']}');
     }
   }
 
-  // Organize orders by status
   void _organizeOrders() {
     _statusCounts = {};
     _ordersByStatus = {
@@ -131,6 +167,7 @@ class OrderProvider with ChangeNotifier {
       'confirmed': [],
       'preparing': [],
       'ready': [],
+      'delivered':[],
       'completed': [],
       'cancelled': [],
     };
@@ -145,7 +182,6 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  // Play notification sound
   Future<void> _playNotificationSound() async {
     try {
       await _audioPlayer.play(AssetSource('sounds/order_notification.mp3'));
@@ -155,7 +191,6 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-// Get today's statistics
   Map<String, dynamic> getTodayStats() {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
@@ -178,12 +213,11 @@ class OrderProvider with ChangeNotifier {
     int completedToday = 0;
     int pendingCount = 0;
     int preparingCount = 0;
-
+    int deliveredCount=0;
     for (var order in todayOrders) {
       final status = order['status'] as String?;
       final total = order['total'];
       
-      // Only count delivered orders as completed
       if (status == 'delivered') {
         completedToday++;
         if (total != null) {
@@ -196,6 +230,9 @@ class OrderProvider with ChangeNotifier {
       } else if (status == 'preparing') {
         preparingCount++;
       }
+      else if(status=='delivered'){
+        deliveredCount++;
+      }
     }
 
     return {
@@ -204,8 +241,11 @@ class OrderProvider with ChangeNotifier {
       'revenue': todayRevenue,
       'pendingOrders': pendingCount,
       'preparingOrders': preparingCount,
+      'deliveredCount':deliveredCount,
     };
   }
+
+  @override
   void dispose() {
     _audioPlayer.dispose();
     super.dispose();

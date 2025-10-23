@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:saborlyadmin/services/api_service.dart';
-import 'package:saborlyadmin/screens/orders_dashboard_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:Saborly_admin/services/api_service.dart';
+import 'package:Saborly_admin/screens/orders_dashboard_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({Key? key}) : super(key: key);
@@ -54,6 +55,34 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
     }
   }
 
+  Future<void> _updateFCMToken() async {
+    try {
+      // Get FCM token
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      
+      if (fcmToken != null) {
+        print('📱 Updating FCM token after login: $fcmToken');
+        
+        // Update FCM token on backend
+        await ApiService.instance.updateFCMToken(
+          fcmToken: fcmToken,
+          platform: 'android', // Change to 'ios' or 'web' as needed
+        );
+        
+        // Save token locally
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('fcm_token', fcmToken);
+        
+        print('✅ FCM token updated successfully after login');
+      } else {
+        print('⚠️ FCM token is null');
+      }
+    } catch (e) {
+      print('❌ Error updating FCM token after login: $e');
+      // Don't block login if FCM token update fails
+    }
+  }
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -91,6 +120,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
 
         // Set token in API service
         ApiService.instance.setAuthToken(token);
+
+        // 🔥 UPDATE FCM TOKEN AFTER LOGIN
+        await _updateFCMToken();
 
         // Show success message
         if (mounted) {

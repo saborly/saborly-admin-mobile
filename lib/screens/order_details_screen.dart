@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:saborlyadmin/models/order.dart';
-import 'package:saborlyadmin/services/order_print_service.dart';
-import 'package:saborlyadmin/services/order_provider.dart';
+import 'package:Saborly_admin/models/order.dart';
+import 'package:Saborly_admin/services/order_print_service.dart';
+import 'package:Saborly_admin/services/order_provider.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -15,12 +15,14 @@ class OrderDetailsScreen extends StatefulWidget {
 
 class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Map<String, dynamic>? _orderData;
+
   bool _isLoading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    
     _loadOrderDetails();
   }
 
@@ -673,94 +675,107 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     );
   }
 
-  Widget _buildOrderItem(BuildContext context, Map<String, dynamic> item) {
-  final isTablet = _isTablet(context);
-  
-  // Extract item name - handle both string and map (multilingual) formats
-  String itemName = 'Unknown Item';
-  final foodItemName = item['foodItem']?['name'];
-  if (foodItemName is String) {
-    itemName = foodItemName;
-  } else if (foodItemName is Map) {
-    // Get name in preferred order: English > Spanish > first available
-    itemName = foodItemName['en'] ?? 
-               foodItemName['es'] ?? 
-               foodItemName.values.first ?? 
-               'Unknown Item';
-  }
-  
-  return Container(
-    padding: EdgeInsets.all(isTablet ? 16 : 12),
-    decoration: BoxDecoration(
-      color: Colors.grey[50],
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(isTablet ? 12 : 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF6B35).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${item['quantity']}x',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFFFF6B35),
-                  fontSize: isTablet ? 16 : 14,
+Widget _buildOrderItem(BuildContext context, Map<String, dynamic> item) {
+    final isTablet = _isTablet(context);
+    debugPrint("order item is ${item}");
+    
+    // Extract item name - handle both string and map (multilingual) formats
+    String itemName = 'Unknown Item';
+    final foodItemName = item['foodItem']?['name'];
+    if (foodItemName is String) {
+      itemName = foodItemName;
+    } else if (foodItemName is Map) {
+      // Get name in preferred order: English > Spanish > Catalan > Arabic
+      itemName = foodItemName['en'] ?? 
+                 foodItemName['es'] ?? 
+                 foodItemName['ca'] ??
+                 foodItemName['ar'] ??
+                 (foodItemName.values.isNotEmpty ? foodItemName.values.first.toString() : 'Unknown Item');
+    }
+    
+    return Container(
+      padding: EdgeInsets.all(isTablet ? 16 : 12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(isTablet ? 12 : 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B35).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${item['quantity']}x',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFFF6B35),
+                    fontSize: isTablet ? 16 : 14,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(width: isTablet ? 16 : 12),
-            Expanded(
-              child: Text(
-                itemName,
+              SizedBox(width: isTablet ? 16 : 12),
+              Expanded(
+                child: Text(
+                  itemName,
+                  style: TextStyle(
+                    fontSize: isTablet ? 18 : 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '\$${item['totalPrice']?.toDouble().toStringAsFixed(2) ?? '0.00'}',
                 style: TextStyle(
                   fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF4A148C),
                 ),
               ),
-            ),
+            ],
+          ),
+          if (item['selectedMealSize'] != null) ...[
+            SizedBox(height: isTablet ? 10 : 8),
             Text(
-              '\$${item['totalPrice']?.toDouble().toStringAsFixed(2) ?? '0.00'}',
+              '• Size: ${item['selectedMealSize']['name'] ?? 'N/A'}',
               style: TextStyle(
-                fontSize: isTablet ? 18 : 16,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF4A148C),
+                fontSize: isTablet ? 15 : 13,
+                color: Colors.grey[700],
               ),
             ),
           ],
-        ),
-        if (item['selectedMealSize'] != null) ...[
-          SizedBox(height: isTablet ? 10 : 8),
-          Text(
-            '• Size: ${item['selectedMealSize']['name'] ?? 'N/A'}',
-            style: TextStyle(
-              fontSize: isTablet ? 15 : 13,
-              color: Colors.grey[700],
+          if (item['selectedExtras'] != null &&
+              (item['selectedExtras'] as List).isNotEmpty) ...[
+            SizedBox(height: isTablet ? 6 : 4),
+            Text(
+              '• Extras: ${(item['selectedExtras'] as List).map((e) => e['name'] ?? 'N/A').join(', ')}',
+              style: TextStyle(
+                fontSize: isTablet ? 15 : 13,
+                color: Colors.grey[700],
+              ),
             ),
-          ),
-        ],
-        if (item['selectedExtras'] != null &&
-            (item['selectedExtras'] as List).isNotEmpty) ...[
-          SizedBox(height: isTablet ? 6 : 4),
-          Text(
-            '• Extras: ${(item['selectedExtras'] as List).map((e) => e['name'] ?? 'N/A').join(', ')}',
-            style: TextStyle(
-              fontSize: isTablet ? 15 : 13,
-              color: Colors.grey[700],
+          ],
+          if (item['specialInstructions'] != null &&
+              item['specialInstructions'].toString().trim().isNotEmpty) ...[
+            SizedBox(height: isTablet ? 6 : 4),
+            Text(
+              '• Special Instructions: ${item['specialInstructions']}',
+              style: TextStyle(
+                fontSize: isTablet ? 15 : 13,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
+          ],
         ],
-      ],
-    ),
-  );
-}
-  Widget _buildActionButtons(BuildContext context) {
+      ),
+    );
+  } Widget _buildActionButtons(BuildContext context) {
     final status = _orderData!['status'];
     final isTablet = _isTablet(context);
     

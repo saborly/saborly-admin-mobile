@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:saborlyadmin/models/order.dart';
-import 'package:saborlyadmin/services/order_stream_service.dart';
+import 'package:Saborly_admin/models/order.dart';
+import 'package:Saborly_admin/services/order_stream_service.dart';
 
 class FirebaseMessagingService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -65,17 +65,44 @@ class FirebaseMessagingService {
   }
 
   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    print('📱 Foreground Message: ${message.data}');
+    print('📱 Foreground Message Received');
+    print('📱 Data: ${message.data}');
+    print('📱 Notification Title: ${message.notification?.title}');
+    print('📱 Notification Body: ${message.notification?.body}');
     
     final data = message.data;
-    if (data['type'] == 'new_order') {
+    
+    // Check if this is a new order notification
+    // Support both data-only and notification+data formats
+    bool isNewOrder = data['type'] == 'new_order' || 
+                      message.notification?.title?.contains('Order') == true;
+    
+    if (isNewOrder) {
+      print('✅ Processing new order notification');
+      
+      // Play sound
       await _playOrderSound();
+      
+      // Show notification
       await showOrderNotification(message);
       
-      // Trigger order stream update
-      OrderStreamService.instance.addNewOrder(
-        OrderNotification.fromJson(data)
-      );
+      // Trigger order stream update if data is available
+      if (data.isNotEmpty && data['type'] == 'new_order') {
+        try {
+          OrderStreamService.instance.addNewOrder(
+            OrderNotification.fromJson(data)
+          );
+          print('✅ Order added to stream');
+        } catch (e) {
+          print('❌ Error adding order to stream: $e');
+        }
+      } else {
+        print('⚠️ Data is empty, skipping order stream update');
+        print('⚠️ BACKEND ISSUE: Data field is missing in notification payload');
+      }
+    } else {
+      print('ℹ️ Not a new order notification, showing generic notification');
+      await showOrderNotification(message);
     }
   }
 
@@ -102,6 +129,12 @@ class FirebaseMessagingService {
   static Future<void> showOrderNotification(RemoteMessage message) async {
     final data = message.data;
     
+    // Get title and body from notification or data
+    final title = message.notification?.title ?? 
+                  '🔔 New Order ${data['orderNumber'] ?? ''}';
+    final body = message.notification?.body ?? 
+                 'Order from ${data['customerName'] ?? 'Customer'} - \$${data['total'] ?? '0.00'}';
+    
     final androidDetails = AndroidNotificationDetails(
       'order_channel',
       'Order Notifications',
@@ -118,8 +151,8 @@ class FirebaseMessagingService {
       ledOnMs: 1000,
       ledOffMs: 500,
       styleInformation: BigTextStyleInformation(
-        message.notification?.body ?? '',
-        contentTitle: message.notification?.title ?? '',
+        body,
+        contentTitle: title,
       ),
     );
 
@@ -132,19 +165,22 @@ class FirebaseMessagingService {
 
     await _localNotifications.show(
       DateTime.now().millisecond,
-      message.notification?.title ?? '🔔 New Order',
-      message.notification?.body ?? 'You have a new order',
+      title,
+      body,
       NotificationDetails(android: androidDetails, iOS: iosDetails),
-      payload: data['orderId'],
+      payload: data['orderId'] ?? 'unknown',
     );
+    
+    print('✅ Notification displayed');
   }
 
   static Future<void> _playOrderSound() async {
     try {
       await _audioPlayer.play(AssetSource('sounds/order_notification.mp3'));
       await _audioPlayer.setVolume(1.0);
+      print('✅ Order sound played');
     } catch (e) {
-      print('Error playing sound: $e');
+      print('❌ Error playing sound: $e');
     }
   }
 

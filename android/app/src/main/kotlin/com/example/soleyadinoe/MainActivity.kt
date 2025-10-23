@@ -1,4 +1,4 @@
-package com.example.saborlyadmin
+package com.example.Saborly_admin
 
 import io.flutter.embedding.android.FlutterActivity
 
