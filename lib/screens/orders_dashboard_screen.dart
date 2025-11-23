@@ -323,15 +323,7 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
               ),
             ),
             SizedBox(width: _isTablet ? 14 : 12),
-            Text(
-              'Orders Dashboard',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
-                fontSize: _isTablet ? 24 : 20,
-                letterSpacing: -0.5,
-              ),
-            ),
+           
           ],
         ),
       ),
@@ -1085,7 +1077,7 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '\$${(order['total'] ?? 0).toStringAsFixed(2)}',
+                          '\€${(order['total'] ?? 0).toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: _isTablet ? 22 : 20,
                             fontWeight: FontWeight.w900,

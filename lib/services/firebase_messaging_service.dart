@@ -6,6 +6,20 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:Saborly_admin/models/order.dart';
 import 'package:Saborly_admin/services/order_stream_service.dart';
 
+// CRITICAL: Top-level function for background message handling
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print('📱 Background Message Received');
+  print('📱 Data: ${message.data}');
+  print('📱 Notification: ${message.notification?.title} - ${message.notification?.body}');
+
+  // Note: Local notifications cannot be shown in background handler as Flutter is not running.
+  // Notifications should be sent with 'notification' payload for Firebase to display them automatically.
+  // This handler can be used for background data processing if needed.
+
+  print('✅ Background message processed');
+}
+
 class FirebaseMessagingService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -14,13 +28,15 @@ class FirebaseMessagingService {
   
   static Future<void> initialize() async {
     // Request permission
-    await _messaging.requestPermission(
+    NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       announcement: true,
       provisional: false,
     );
+
+    print('📱 Notification permission status: ${settings.authorizationStatus}');
 
     // Initialize local notifications
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -38,7 +54,7 @@ class FirebaseMessagingService {
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
-    // Create notification channel for Android
+    // Create notification channel for Android with custom sound
     const androidChannel = AndroidNotificationChannel(
       'order_channel',
       'Order Notifications',
@@ -47,6 +63,7 @@ class FirebaseMessagingService {
       playSound: true,
       enableVibration: true,
       enableLights: true,
+      sound: RawResourceAndroidNotificationSound('order_notification'),
     );
 
     await _localNotifications
@@ -54,14 +71,18 @@ class FirebaseMessagingService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(androidChannel);
 
+    print('✅ Notification channel created');
+
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     
-    // Handle background messages
+    // Handle background messages (app in background but not terminated)
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
     
     // Handle initial message (when app is opened from terminated state)
     _messaging.getInitialMessage().then(_handleInitialMessage);
+    
+    print('✅ Firebase Messaging initialized');
   }
 
   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
@@ -73,7 +94,6 @@ class FirebaseMessagingService {
     final data = message.data;
     
     // Check if this is a new order notification
-    // Support both data-only and notification+data formats
     bool isNewOrder = data['type'] == 'new_order' || 
                       message.notification?.title?.contains('Order') == true;
     
@@ -98,7 +118,6 @@ class FirebaseMessagingService {
         }
       } else {
         print('⚠️ Data is empty, skipping order stream update');
-        print('⚠️ BACKEND ISSUE: Data field is missing in notification payload');
       }
     } else {
       print('ℹ️ Not a new order notification, showing generic notification');
@@ -107,23 +126,44 @@ class FirebaseMessagingService {
   }
 
   static Future<void> _handleMessageOpenedApp(RemoteMessage message) async {
-    print('📱 Message opened app: ${message.data}');
-    // Navigate to order details
-    if (message.data['orderId'] != null) {
-      // NavigationService.navigateToOrder(message.data['orderId']);
+    print('📱 Message opened app from background: ${message.data}');
+    
+    // Add to order stream when opened from background
+    if (message.data['type'] == 'new_order') {
+      try {
+        OrderStreamService.instance.addNewOrder(
+          OrderNotification.fromJson(message.data)
+        );
+        print('✅ Order added to stream from background tap');
+      } catch (e) {
+        print('❌ Error adding order from background: $e');
+      }
     }
   }
 
   static Future<void> _handleInitialMessage(RemoteMessage? message) async {
     if (message != null) {
-      print('📱 Initial message: ${message.data}');
+      print('📱 Initial message (app opened from terminated state): ${message.data}');
+      
+      // Add to order stream when opened from terminated state
+      if (message.data['type'] == 'new_order') {
+        try {
+          OrderStreamService.instance.addNewOrder(
+            OrderNotification.fromJson(message.data)
+          );
+          print('✅ Order added to stream from terminated state');
+        } catch (e) {
+          print('❌ Error adding order from terminated state: $e');
+        }
+      }
+      
       await _handleMessageOpenedApp(message);
     }
   }
 
   static void _onNotificationTap(NotificationResponse response) {
     print('📱 Notification tapped: ${response.payload}');
-    // Navigate to order details
+    // Navigate to order details if needed
   }
 
   static Future<void> showOrderNotification(RemoteMessage message) async {
@@ -133,7 +173,7 @@ class FirebaseMessagingService {
     final title = message.notification?.title ?? 
                   '🔔 New Order ${data['orderNumber'] ?? ''}';
     final body = message.notification?.body ?? 
-                 'Order from ${data['customerName'] ?? 'Customer'} - \$${data['total'] ?? '0.00'}';
+                 'Order from ${data['customerName'] ?? 'Customer'} - €${data['total'] ?? '0.00'}';
     
     final androidDetails = AndroidNotificationDetails(
       'order_channel',
@@ -144,6 +184,7 @@ class FirebaseMessagingService {
       ticker: 'New Order',
       icon: '@mipmap/ic_launcher',
       playSound: true,
+      sound: const RawResourceAndroidNotificationSound('order_notification'),
       enableVibration: true,
       enableLights: true,
       color: const Color(0xFFFF6B35),
@@ -164,7 +205,7 @@ class FirebaseMessagingService {
     );
 
     await _localNotifications.show(
-      DateTime.now().millisecond,
+      DateTime.now().millisecondsSinceEpoch,
       title,
       body,
       NotificationDetails(android: androidDetails, iOS: iosDetails),
@@ -176,6 +217,7 @@ class FirebaseMessagingService {
 
   static Future<void> _playOrderSound() async {
     try {
+      await _audioPlayer.stop(); // Stop any playing sound first
       await _audioPlayer.play(AssetSource('sounds/order_notification.mp3'));
       await _audioPlayer.setVolume(1.0);
       print('✅ Order sound played');

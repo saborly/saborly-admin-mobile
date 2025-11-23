@@ -1,3 +1,4 @@
+import 'package:Saborly_admin/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:Saborly_admin/models/order.dart';
@@ -302,7 +303,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 ),
               ),
               Text(
-                '\$${_orderData!['total']?.toDouble().toStringAsFixed(2) ?? '0.00'}',
+                '\€${_orderData!['total']?.toDouble().toStringAsFixed(2) ?? '0.00'}',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: _getResponsiveFontSize(context, 24),
@@ -328,7 +329,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ),
         ),
         Text(
-          '\$${amount.toStringAsFixed(2)}',
+          '\€${amount.toStringAsFixed(2)}',
           style: TextStyle(
             color: Colors.white,
             fontSize: _getResponsiveFontSize(context, 14),
@@ -730,7 +731,7 @@ Widget _buildOrderItem(BuildContext context, Map<String, dynamic> item) {
                 ),
               ),
               Text(
-                '\$${item['totalPrice']?.toDouble().toStringAsFixed(2) ?? '0.00'}',
+                '\€${item['totalPrice']?.toDouble().toStringAsFixed(2) ?? '0.00'}',
                 style: TextStyle(
                   fontSize: isTablet ? 18 : 16,
                   fontWeight: FontWeight.bold,
@@ -775,102 +776,238 @@ Widget _buildOrderItem(BuildContext context, Map<String, dynamic> item) {
         ],
       ),
     );
-  } Widget _buildActionButtons(BuildContext context) {
-    final status = _orderData!['status'];
-    final isTablet = _isTablet(context);
-    
-    return Container(
-      margin: EdgeInsets.all(isTablet ? 24 : 16),
-      child: Column(
-        children: [
-          if (status == 'pending') ...[
+  } 
+Widget _buildActionButtons(BuildContext context) {
+  final status = _orderData!['status'];
+  final isTablet = _isTablet(context);
+  
+  return Container(
+    margin: EdgeInsets.all(isTablet ? 24 : 16),
+    child: Column(
+      children: [
+        // PENDING -> CONFIRMED
+        if (status == 'pending') ...[
+          _buildActionButton(
+            context,
+            onPressed: () => _updateOrderStatus('confirmed'),
+            icon: Icons.check_circle,
+            label: 'ACCEPT ORDER',
+            color: Colors.green,
+          ),
+          SizedBox(height: isTablet ? 16 : 12),
+        ],
+        
+        // CONFIRMED -> PREPARING
+        if (status == 'confirmed') ...[
+          _buildActionButton(
+            context,
+            onPressed: () => _updateOrderStatus('preparing'),
+            icon: Icons.restaurant,
+            label: 'START PREPARING',
+            color: Colors.blue,
+          ),
+          SizedBox(height: isTablet ? 16 : 12),
+        ],
+        
+        // PREPARING -> READY
+        if (status == 'preparing') ...[
+          _buildActionButton(
+            context,
+            onPressed: () => _updateOrderStatus('ready'),
+            icon: Icons.done_all,
+            label: 'MARK AS READY',
+            color: Colors.green,
+          ),
+          SizedBox(height: isTablet ? 16 : 12),
+        ],
+        
+        // READY -> Different paths for delivery vs pickup
+        if (status == 'ready') ...[
+          if (_isDeliveryOrder) ...[
+            // For delivery orders: Show button to mark as picked up by driver
             _buildActionButton(
               context,
-              onPressed: () => _updateOrderStatus('confirmed'),
-              icon: Icons.check_circle,
-              label: 'ACCEPT ORDER',
-              color: Colors.green,
+              onPressed: () => _showDriverPickupDialog(context),
+              icon: Icons.motorcycle,
+              label: 'DRIVER PICKED UP',
+              color: Colors.orange,
             ),
-            SizedBox(height: isTablet ? 16 : 12),
-          ],
-          
-          if (status == 'confirmed') ...[
-            _buildActionButton(
-              context,
-              onPressed: () => _updateOrderStatus('preparing'),
-              icon: Icons.restaurant,
-              label: 'START PREPARING',
-              color: Colors.blue,
-            ),
-            SizedBox(height: isTablet ? 16 : 12),
-          ],
-          
-          if (status == 'preparing') ...[
-            _buildActionButton(
-              context,
-              onPressed: () => _updateOrderStatus('ready'),
-              icon: Icons.check,
-              label: 'MARK AS READY',
-              color: Colors.green,
-            ),
-            SizedBox(height: isTablet ? 16 : 12),
-          ],
-          
-          if (status == 'ready') ...[
-            if (_isDeliveryOrder) ...[
-              _buildActionButton(
-                context,
-                onPressed: () => _updateOrderStatus('pickup'),
-                icon: Icons.person_pin_circle,
-                label: 'MARK AS PICKED UP BY DRIVER',
-                color: Colors.orange,
-              ),
-            ] else ...[
-              _buildActionButton(
-                context,
-                onPressed: () => _updateOrderStatus('delivered'),
-                icon: Icons.check_circle_outline,
-                label: 'MARK AS PICKED UP BY CUSTOMER',
-                color: Colors.teal,
-              ),
-            ],
-            SizedBox(height: isTablet ? 16 : 12),
-          ],
-          
-          if (status == 'pickup' && _isDeliveryOrder) ...[
-            _buildActionButton(
-              context,
-              onPressed: () => _updateOrderStatus('out-for-delivery'),
-              icon: Icons.local_shipping,
-              label: 'OUT FOR DELIVERY',
-              color: Colors.indigo,
-            ),
-            SizedBox(height: isTablet ? 16 : 12),
-          ],
-          
-          if (status == 'out-for-delivery' && _isDeliveryOrder) ...[
+          ] else ...[
+            // For pickup orders: READY -> DELIVERED (customer picks up)
             _buildActionButton(
               context,
               onPressed: () => _updateOrderStatus('delivered'),
-              icon: Icons.check_circle,
-              label: 'MARK AS DELIVERED',
+              icon: Icons.check_circle_outline,
+              label: 'CUSTOMER PICKED UP',
               color: Colors.teal,
             ),
-            SizedBox(height: isTablet ? 16 : 12),
           ],
-          
-          if (['pending', 'confirmed'].contains(status)) ...[
-            _buildOutlinedButton(
-              context,
-              onPressed: () => _updateOrderStatus('cancelled'),
-              icon: Icons.cancel,
-              label: 'CANCEL ORDER',
-            ),
-          ],
+          SizedBox(height: isTablet ? 16 : 12),
         ],
+        
+        // PICKUP/DRIVERPICKUP -> OUT-FOR-DELIVERY (only for delivery orders)
+        if ((status == 'pickup' || status == 'driverpickup') && _isDeliveryOrder) ...[
+          _buildActionButton(
+            context,
+            onPressed: () => _updateOrderStatus('out-for-delivery'),
+            icon: Icons.local_shipping,
+            label: 'OUT FOR DELIVERY',
+            color: Colors.indigo,
+          ),
+          SizedBox(height: isTablet ? 16 : 12),
+        ],
+        
+        // OUT-FOR-DELIVERY -> DELIVERED (only for delivery orders)
+        if (status == 'out-for-delivery' && _isDeliveryOrder) ...[
+          _buildActionButton(
+            context,
+            onPressed: () => _updateOrderStatus('delivered'),
+            icon: Icons.check_circle,
+            label: 'MARK AS DELIVERED',
+            color: Colors.teal,
+          ),
+          SizedBox(height: isTablet ? 16 : 12),
+        ],
+        
+        // CANCEL option for pending and confirmed orders only
+        if (['pending', 'confirmed'].contains(status)) ...[
+          _buildOutlinedButton(
+            context,
+            onPressed: () => _showCancelDialog(context),
+            icon: Icons.cancel,
+            label: 'CANCEL ORDER',
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+// Add driver pickup dialog
+void _showDriverPickupDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.motorcycle, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Driver Pickup'),
+        ],
+      ),
+      content: Text(
+        'Confirm that the driver has picked up this order from the restaurant?',
+        style: TextStyle(fontSize: 16),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            _updateOrderStatus('pickup');
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+          ),
+          child: const Text('CONFIRM PICKUP'),
+        ),
+      ],
+    ),
+  );
+}
+
+// Add cancel dialog method
+void _showCancelDialog(BuildContext context) {
+  final TextEditingController reasonController = TextEditingController();
+  
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Cancel Order'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Are you sure you want to cancel this order?'),
+          const SizedBox(height: 16),
+          TextField(
+            controller: reasonController,
+            decoration: const InputDecoration(
+              labelText: 'Cancellation Reason',
+              hintText: 'Enter reason for cancellation',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('KEEP ORDER'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            if (reasonController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please provide a cancellation reason'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+            
+            Navigator.pop(context);
+            await _cancelOrder(reasonController.text.trim());
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+          ),
+          child: const Text('CANCEL ORDER'),
+        ),
+      ],
+    ),
+  );
+}
+
+// Add cancel order method
+Future<void> _cancelOrder(String reason) async {
+  if (_orderData == null) return;
+
+  try {
+    // Call the cancel API
+    await ApiService.instance.cancelOrder(
+      orderId: widget.orderId,
+      reason: reason,
+    );
+    
+    setState(() {
+      _orderData!['status'] = 'cancelled';
+      _orderData!['cancellation'] = {
+        'reason': reason,
+        'cancelledBy': 'admin',
+        'cancelledAt': DateTime.now().toIso8601String(),
+      };
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Order cancelled successfully'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error cancelling order: $e'),
+        backgroundColor: Colors.red,
       ),
     );
   }
+}
 
   Widget _buildActionButton(
     BuildContext context, {
@@ -948,60 +1085,62 @@ Widget _buildOrderItem(BuildContext context, Map<String, dynamic> item) {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Colors.orange;
-      case 'confirmed':
-        return Colors.blue;
-      case 'preparing':
-        return Colors.purple;
-      case 'ready':
-        return Colors.green;
-      case 'pickup':
-        return Colors.orange;
-      case 'shop':
-        return Colors.deepOrange;
-      case 'out-for-delivery':
-        return Colors.indigo;
-      case 'delivered':
-        return Colors.teal;
-      case 'cancelled':
-        return Colors.red;
-      case 'refunded':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
+Color _getStatusColor(String status) {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return Colors.orange;
+    case 'confirmed':
+      return Colors.blue;
+    case 'preparing':
+      return Colors.purple;
+    case 'ready':
+      return Colors.green;
+    case 'pickup':
+      return Colors.orange.shade700;
+    case 'driverpickup':
+      return Colors.orange.shade700;
+    case 'shop':
+      return Colors.deepOrange;
+    case 'out-for-delivery':
+      return Colors.indigo;
+    case 'delivered':
+      return Colors.teal;
+    case 'cancelled':
+      return Colors.red;
+    case 'refunded':
+      return Colors.grey;
+    default:
+      return Colors.grey;
   }
+}
 
-  IconData _getStatusIcon(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Icons.pending_actions;
-      case 'confirmed':
-        return Icons.check_circle;
-      case 'preparing':
-        return Icons.restaurant;
-      case 'ready':
-        return Icons.done_all;
-      case 'pickup':
-        return Icons.person_pin_circle;
-      case 'shop':
-        return Icons.store;
-      case 'out-for-delivery':
-        return Icons.local_shipping;
-      case 'delivered':
-        return Icons.delivery_dining;
-      case 'cancelled':
-        return Icons.cancel;
-      case 'refunded':
-        return Icons.money_off;
-      default:
-        return Icons.info;
-    }
+IconData _getStatusIcon(String status) {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return Icons.pending_actions;
+    case 'confirmed':
+      return Icons.check_circle;
+    case 'preparing':
+      return Icons.restaurant;
+    case 'ready':
+      return Icons.done_all;
+    case 'pickup':
+    case 'driverpickup':
+      return Icons.person_pin_circle;
+    case 'shop':
+      return Icons.store;
+    case 'out-for-delivery':
+      return Icons.local_shipping;
+    case 'delivered':
+      return Icons.delivery_dining;
+    case 'cancelled':
+      return Icons.cancel;
+    case 'refunded':
+      return Icons.money_off;
+    default:
+      return Icons.info;
   }
-
+}
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);

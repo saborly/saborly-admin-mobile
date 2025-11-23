@@ -10,12 +10,6 @@ import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
 import 'package:Saborly_admin/services/order_provider.dart';
 
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  print('📱 Background Message: ${message.data}');
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -24,14 +18,14 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
+  // CRITICAL: Register background message handler BEFORE initializing messaging service
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  
   // Initialize Firebase Messaging
   await FirebaseMessagingService.initialize();
   
   // Initialize API Service token
   await ApiService.instance.initToken();
-  
-  // Register background message handler
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   
   // Get and save FCM token
   await _initializeFCMToken();
@@ -59,13 +53,7 @@ Future<void> _initializeFCMToken() async {
     // Check if token has changed
     final tokenChanged = storedToken != fcmToken;
     
-    if (tokenChanged) {
-      print('🔄 FCM Token changed or new');
-      print('📱 Old Token: $storedToken');
-      print('📱 New Token: $fcmToken');
-    }
-    
-    // Save token locally first
+  
     await prefs.setString('fcm_token', fcmToken);
     
     // If user is logged in, update token on backend
@@ -133,8 +121,8 @@ class MyApp extends StatelessWidget {
             seedColor: const Color(0xFF4A148C),
             brightness: Brightness.light,
           ),
-          cardTheme: CardTheme(
-            elevation: 2,
+          cardTheme: CardThemeData(
+            elevation: 2.0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),

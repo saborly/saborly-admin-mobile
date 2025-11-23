@@ -111,13 +111,13 @@ class OrderPrintService {
 
         // Totals
         pw.SizedBox(height: 8),
-        _buildRow('Subtotal:', '\$${subtotal.toStringAsFixed(2)}'),
+        _buildRow('Subtotal:', '\€${subtotal.toStringAsFixed(2)}'),
         if (deliveryFee > 0)
-          _buildRow('Delivery:', '\$${deliveryFee.toStringAsFixed(2)}'),
+          _buildRow('Delivery:', '\€${deliveryFee.toStringAsFixed(2)}'),
         if (tax > 0)
-          _buildRow('Tax:', '\$${tax.toStringAsFixed(2)}'),
+          _buildRow('Tax:', '\€${tax.toStringAsFixed(2)}'),
         if (discount > 0)
-          _buildRow('Discount:', '-\$${discount.toStringAsFixed(2)}'),
+          _buildRow('Discount:', '-\€${discount.toStringAsFixed(2)}'),
         
         pw.SizedBox(height: 4),
         pw.Divider(thickness: 2),
@@ -125,7 +125,7 @@ class OrderPrintService {
         
         _buildRow(
           'TOTAL:',
-          '\$${total.toStringAsFixed(2)}',
+          '\€${total.toStringAsFixed(2)}',
           isBold: true,
           fontSize: 16,
         ),
@@ -248,7 +248,7 @@ static pw.Widget _buildItemRow(Map<String, dynamic> item) {
               ),
             ),
             pw.Text(
-              '\$${price.toStringAsFixed(2)}',
+              '\€${price.toStringAsFixed(2)}',
               style: const pw.TextStyle(fontSize: 11),
             ),
           ],
