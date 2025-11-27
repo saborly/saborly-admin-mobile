@@ -1,11 +1,13 @@
 package com.saborly.saborly_admin
 
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -22,9 +24,23 @@ class CustomFirebaseMessagingService : FlutterFirebaseMessagingService() {
         val isNewOrder = data["type"] == "new_order" ||
                         remoteMessage.notification?.title?.contains("Order") == true
 
-        if (isNewOrder) {
+        if (isNewOrder && !isAppInForeground()) {
             showNotification(remoteMessage)
         }
+    }
+
+    private fun isAppInForeground(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val appProcesses = activityManager.runningAppProcesses ?: return false
+
+        val packageName = packageName
+        for (appProcess in appProcesses) {
+            if (appProcess.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND &&
+                appProcess.processName == packageName) {
+                return true
+            }
+        }
+        return false
     }
 
     override fun onNewToken(token: String) {
@@ -53,7 +69,7 @@ class CustomFirebaseMessagingService : FlutterFirebaseMessagingService() {
                 description = "Notifications for new orders"
                 enableVibration(true)
                 enableLights(true)
-                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null)
+                setSound(Uri.parse("android.resource://" + packageName + "/" + R.raw.order_notification), null)
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -78,7 +94,7 @@ class CustomFirebaseMessagingService : FlutterFirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
-            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+            .setSound(Uri.parse("android.resource://" + packageName + "/" + R.raw.order_notification))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

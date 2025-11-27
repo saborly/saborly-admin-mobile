@@ -52,7 +52,7 @@
     <!-- Custom Firebase Messaging Service -->
     <service
         android:name="com.saborly.saborly_admin.CustomFirebaseMessagingService"
-        android:exported="false">
+        android:exported="true">
         <intent-filter>
             <action android:name="com.google.firebase.MESSAGING_EVENT" />
         </intent-filter>
