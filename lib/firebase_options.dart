@@ -48,20 +48,19 @@ class DefaultFirebaseOptions {
         );
     }
   }
-  
-    static const FirebaseOptions web = FirebaseOptions(
- apiKey: "AIzaSyBnwI2qJNDW3CVNdf1_NidUMUrYTepqAxg",
-  authDomain: "saborly-397b6.firebaseapp.com",
-  projectId: "saborly-397b6",
-  storageBucket: "saborly-397b6.firebasestorage.app",
-  messagingSenderId: "420029681993",
-  appId: "1:420029681993:web:4c0228b4b3c3efe1d68a98",
-  measurementId: "G-6EWPX5Z5J9"
-  );
- 
+
+  static const FirebaseOptions web = FirebaseOptions(
+      apiKey: "AIzaSyBnwI2qJNDW3CVNdf1_NidUMUrYTepqAxg",
+      authDomain: "saborly-397b6.firebaseapp.com",
+      projectId: "saborly-397b6",
+      storageBucket: "saborly-397b6.firebasestorage.app",
+      messagingSenderId: "420029681993",
+      appId: "1:420029681993:web:4c0228b4b3c3efe1d68a98",
+      measurementId: "G-6EWPX5Z5J9");
+
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDu3clMHcTEFgq1a5tcrESS705RUK1kYd4',
-    appId: '1:420029681993:android:d09494f75ec913d5d68a98',
+    apiKey: 'AIzaSyCB_sjOmiBU-9PLh4Mn5pscrUlnsw7NpUY',
+    appId: '1:420029681993:android:a5cf60729f9758d0d68a98',
     messagingSenderId: '420029681993',
     projectId: 'saborly-397b6',
     storageBucket: 'saborly-397b6.firebasestorage.app',
