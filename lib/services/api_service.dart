@@ -4,8 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   static final ApiService instance = ApiService._internal();
   factory ApiService() => instance;
-  ApiService._internal();
-
   final Dio _dio = Dio(
     BaseOptions(
       baseUrl: 'https://saborly-backend.vercel.app/api/v1',
@@ -19,6 +17,19 @@ class ApiService {
 
   String? _authToken;
 
+  ApiService._internal() {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final prefs = await SharedPreferences.getInstance();
+        final bid = prefs.getString('branch_id');
+        if (bid != null && bid.isNotEmpty) {
+          options.headers['X-Branch-Id'] = bid;
+        }
+        handler.next(options);
+      },
+    ));
+  }
+
   // Initialize token from storage
   Future<void> initToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -31,6 +42,16 @@ class ApiService {
   void setAuthToken(String token) {
     _authToken = token;
     _dio.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  Future<void> setBranchId(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('branch_id', id);
+  }
+
+  Future<void> clearBranchId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('branch_id');
   }
 
   // ==================== AUTH ENDPOINTS ====================
@@ -55,6 +76,24 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getPublicBranches() async {
+    try {
+      final response = await _dio.get('/branches/public');
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getBranches() async {
+    try {
+      final response = await _dio.get('/branches');
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   // Get Profile
   Future<Map<String, dynamic>> getProfile() async {
     try {
@@ -72,9 +111,13 @@ class ApiService {
       
       // Clear local storage
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      await prefs.remove('auth_token');
+      await prefs.remove('branch_id');
+      await prefs.remove('user_id');
+      await prefs.remove('user_name');
+      await prefs.remove('user_email');
+      await prefs.remove('user_role');
       
-      // Clear token
       _authToken = null;
       _dio.options.headers.remove('Authorization');
     } on DioException catch (e) {

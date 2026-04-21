@@ -19,8 +19,20 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  bool _loadingBranches = true;
+  List<dynamic> _publicBranches = [];
+  String? _selectedBranchId;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+
+  static const _adminRoles = {
+    'admin',
+    'manager',
+    'superadmin',
+    'super_admin',
+    'branch_admin',
+    'staff',
+  };
 
   @override
   void initState() {
@@ -34,19 +46,64 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
     );
     _animationController.forward();
     
-    // Check if already logged in
     _checkLoginStatus();
+    _loadPublicBranches();
+  }
+
+  String _branchIdOf(Map<String, dynamic> b) {
+    final id = b['_id'];
+    return id?.toString() ?? '';
+  }
+
+  Future<void> _loadPublicBranches() async {
+    setState(() => _loadingBranches = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('branch_id');
+      final res = await ApiService.instance.getPublicBranches();
+      final list = (res['branches'] as List?) ?? [];
+
+      String? selected = saved;
+      if (selected != null && selected.isNotEmpty) {
+        final ok = list.any((e) => e is Map && _branchIdOf(Map<String, dynamic>.from(e)) == selected);
+        if (!ok) selected = null;
+      }
+      final firstBranch = list.isNotEmpty ? list.first : null;
+      if (selected == null && list.length == 1 && firstBranch is Map) {
+        selected = _branchIdOf(Map<String, dynamic>.from(firstBranch));
+      }
+
+      if (selected != null && selected.isNotEmpty) {
+        await ApiService.instance.setBranchId(selected);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _publicBranches = list;
+        _selectedBranchId = selected;
+        _loadingBranches = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingBranches = false;
+        _errorMessage = 'Could not load branches. Check your connection.';
+      });
+    }
   }
 
   Future<void> _checkLoginStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
+    final branchId = prefs.getString('branch_id');
     
     if (token != null) {
-      // Set token in API service
+      if (branchId == null || branchId.isEmpty) {
+        await prefs.remove('auth_token');
+        return;
+      }
       ApiService.instance.setAuthToken(token);
       
-      // Navigate to dashboard
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const OrdersDashboardScreen()),
@@ -86,6 +143,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_selectedBranchId == null || _selectedBranchId!.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please select a branch.';
+      });
+      return;
+    }
+    await ApiService.instance.setBranchId(_selectedBranchId!);
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -100,11 +165,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
       if (response['success'] == true) {
         final token = response['token'];
         final user = response['user'];
+        final role = user['role']?.toString() ?? '';
 
-        // Check if user is admin or manager
-        if (user['role'] != 'admin' && user['role'] != 'manager' && user['role'] != 'superadmin') {
+        if (!_adminRoles.contains(role)) {
           setState(() {
-            _errorMessage = 'Access denied. Admin or Manager account required.';
+            _errorMessage = 'Access denied. Admin or staff account required.';
             _isLoading = false;
           });
           return;
@@ -113,10 +178,15 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
         // Save token
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
-        await prefs.setString('user_id', user['id']);
+        await prefs.setString('user_id', user['id'].toString());
         await prefs.setString('user_name', '${user['firstName']} ${user['lastName']}');
         await prefs.setString('user_email', user['email']);
-        await prefs.setString('user_role', user['role']);
+        await prefs.setString('user_role', role);
+
+        final ub = user['branchId'];
+        if (ub != null && ub.toString().isNotEmpty) {
+          await ApiService.instance.setBranchId(ub.toString());
+        }
 
         // Set token in API service
         ApiService.instance.setAuthToken(token);
@@ -336,6 +406,54 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
                                   return null;
                                 },
                               ),
+                              const SizedBox(height: 16),
+                              if (_loadingBranches)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Center(child: CircularProgressIndicator()),
+                                )
+                              else if (_publicBranches.isEmpty)
+                                Text(
+                                  'No active branches available.',
+                                  style: TextStyle(color: Colors.orange[800]),
+                                )
+                              else ...[
+                                DropdownButtonFormField<String>(
+                                  value: _selectedBranchId != null &&
+                                          _publicBranches.any((e) =>
+                                              e is Map &&
+                                              _branchIdOf(Map<String, dynamic>.from(e)) ==
+                                                  _selectedBranchId)
+                                      ? _selectedBranchId
+                                      : null,
+                                  decoration: InputDecoration(
+                                    labelText: 'Branch',
+                                    prefixIcon: const Icon(Icons.store_outlined),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey[50],
+                                  ),
+                                  items: _publicBranches.map((e) {
+                                    if (e is! Map) return null;
+                                    final b = Map<String, dynamic>.from(e);
+                                    final id = _branchIdOf(b);
+                                    if (id.isEmpty) return null;
+                                    final name = b['name']?.toString() ?? id;
+                                    return DropdownMenuItem<String>(
+                                      value: id,
+                                      child: Text(name),
+                                    );
+                                  }).whereType<DropdownMenuItem<String>>().toList(),
+                                  onChanged: (v) {
+                                    setState(() => _selectedBranchId = v);
+                                    if (v != null) {
+                                      ApiService.instance.setBranchId(v);
+                                    }
+                                  },
+                                ),
+                              ],
                               const SizedBox(height: 24),
 
                               // Login Button

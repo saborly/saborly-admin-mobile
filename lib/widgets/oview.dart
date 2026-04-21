@@ -1,12 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:Saborly_admin/screens/auth.dart';
 
 import 'package:Saborly_admin/services/api_service.dart';
+import 'package:Saborly_admin/services/order_provider.dart';
 
 // Add this widget to your OrdersDashboardScreen AppBar
-class ProfileMenuWidget extends StatelessWidget {
+class ProfileMenuWidget extends StatefulWidget {
   const ProfileMenuWidget({Key? key}) : super(key: key);
+
+  @override
+  State<ProfileMenuWidget> createState() => _ProfileMenuWidgetState();
+}
+
+class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
+  String? _role;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted) setState(() => _role = p.getString('user_role'));
+    });
+  }
+
+  bool _isSuperRole(String? r) {
+    if (r == null) return false;
+    final x = r.toLowerCase();
+    return x == 'superadmin' || x == 'super_admin';
+  }
 
   Future<Map<String, String>> _getUserData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -197,6 +220,16 @@ class ProfileMenuWidget extends StatelessWidget {
             dense: true,
           ),
         ),
+        if (_isSuperRole(_role))
+          const PopupMenuItem<String>(
+            value: 'switch_branch',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.swap_horiz),
+              title: Text('Switch branch'),
+              dense: true,
+            ),
+          ),
         // Divider
         const PopupMenuDivider(),
         // Logout Option
@@ -220,6 +253,9 @@ class ProfileMenuWidget extends StatelessWidget {
             // Navigate to settings screen
             _showSettings(context);
             break;
+          case 'switch_branch':
+            _showBranchSwitcher(context);
+            break;
           case 'logout':
             _logout(context);
             break;
@@ -228,10 +264,72 @@ class ProfileMenuWidget extends StatelessWidget {
     );
   }
 
+  Future<void> _showBranchSwitcher(BuildContext context) async {
+    try {
+      final res = await ApiService.instance.getBranches();
+      final branches = (res['branches'] as List?) ?? [];
+      if (!context.mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        builder: (sheetCtx) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Select branch',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              for (final raw in branches)
+                if (raw is Map)
+                  Builder(
+                    builder: (_) {
+                      final b = Map<String, dynamic>.from(raw);
+                      final id = b['_id']?.toString() ?? '';
+                      final name = b['name']?.toString() ?? id;
+                      if (id.isEmpty) return const SizedBox.shrink();
+                      return ListTile(
+                        title: Text(name),
+                        subtitle: b['location'] != null
+                            ? Text(b['location'].toString())
+                            : null,
+                        onTap: () async {
+                          await ApiService.instance.setBranchId(id);
+                          if (context.mounted) {
+                            Navigator.pop(sheetCtx);
+                            context.read<OrderProvider>().loadOrders();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Switched to $name')),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load branches: $e')),
+        );
+      }
+    }
+  }
+
   Color _getRoleColor(String role) {
     switch (role.toLowerCase()) {
       case 'superadmin':
+      case 'super_admin':
         return Colors.purple;
+      case 'branch_admin':
+        return Colors.deepOrange;
+      case 'staff':
+        return Colors.teal;
       case 'admin':
         return Colors.blue;
       case 'manager':
