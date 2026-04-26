@@ -55,6 +55,35 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
     return id?.toString() ?? '';
   }
 
+  /// Prefer Sabadell, then Barcelona, then first (matches admin web).
+  String? _pickPreferredBranchId(List<dynamic> list) {
+    if (list.isEmpty) return null;
+    for (final e in list) {
+      if (e is! Map) continue;
+      final b = Map<String, dynamic>.from(e);
+      final name = '${b['name'] ?? ''}'.toLowerCase();
+      final loc = '${b['location'] ?? ''}'.toLowerCase();
+      if (name.contains('sabadell') || loc.contains('sabadell')) {
+        final id = _branchIdOf(b);
+        if (id.isNotEmpty) return id;
+      }
+    }
+    for (final e in list) {
+      if (e is! Map) continue;
+      final b = Map<String, dynamic>.from(e);
+      final name = '${b['name'] ?? ''}'.toLowerCase();
+      final loc = '${b['location'] ?? ''}'.toLowerCase();
+      if (name.contains('barcelona') || loc.contains('barcelona')) {
+        final id = _branchIdOf(b);
+        if (id.isNotEmpty) return id;
+      }
+    }
+    final first = list.first;
+    if (first is! Map) return null;
+    final id = _branchIdOf(Map<String, dynamic>.from(first));
+    return id.isEmpty ? null : id;
+  }
+
   Future<void> _loadPublicBranches() async {
     setState(() => _loadingBranches = true);
     try {
@@ -72,6 +101,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
       if (selected == null && list.length == 1 && firstBranch is Map) {
         selected = _branchIdOf(Map<String, dynamic>.from(firstBranch));
       }
+      selected ??= _pickPreferredBranchId(list);
 
       if (selected != null && selected.isNotEmpty) {
         await ApiService.instance.setBranchId(selected);
@@ -226,7 +256,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
       }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        final msg = e is String ? e : e.toString();
+        _errorMessage = msg.replaceFirst('Exception: ', '').trim();
         _isLoading = false;
       });
     }
@@ -341,6 +372,69 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
                                   ),
                                 ),
 
+                              if (_loadingBranches)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Center(child: CircularProgressIndicator()),
+                                )
+                              else if (_publicBranches.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Text(
+                                    'No active branches available.',
+                                    style: TextStyle(color: Colors.orange[800]),
+                                  ),
+                                )
+                              else ...[
+                                DropdownButtonFormField<String>(
+                                  value: _selectedBranchId != null &&
+                                          _publicBranches.any((e) =>
+                                              e is Map &&
+                                              _branchIdOf(Map<String, dynamic>.from(e)) ==
+                                                  _selectedBranchId)
+                                      ? _selectedBranchId
+                                      : null,
+                                  decoration: InputDecoration(
+                                    labelText: 'Branch',
+                                    prefixIcon: const Icon(Icons.store_outlined),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey[50],
+                                  ),
+                                  items: _publicBranches.map((e) {
+                                    if (e is! Map) return null;
+                                    final b = Map<String, dynamic>.from(e);
+                                    final id = _branchIdOf(b);
+                                    if (id.isEmpty) return null;
+                                    final name = b['name']?.toString() ?? id;
+                                    return DropdownMenuItem<String>(
+                                      value: id,
+                                      child: Text(name),
+                                    );
+                                  }).whereType<DropdownMenuItem<String>>().toList(),
+                                  onChanged: (v) {
+                                    setState(() => _selectedBranchId = v);
+                                    if (v != null) {
+                                      ApiService.instance.setBranchId(v);
+                                    }
+                                  },
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8, bottom: 8),
+                                  child: Text(
+                                    'Super-admin and platform admin accounts work in any branch. '
+                                    'Branch staff must use their assigned store.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+
                               // Email Field
                               TextFormField(
                                 controller: _emailController,
@@ -406,54 +500,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> with SingleTickerPr
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 16),
-                              if (_loadingBranches)
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8),
-                                  child: Center(child: CircularProgressIndicator()),
-                                )
-                              else if (_publicBranches.isEmpty)
-                                Text(
-                                  'No active branches available.',
-                                  style: TextStyle(color: Colors.orange[800]),
-                                )
-                              else ...[
-                                DropdownButtonFormField<String>(
-                                  value: _selectedBranchId != null &&
-                                          _publicBranches.any((e) =>
-                                              e is Map &&
-                                              _branchIdOf(Map<String, dynamic>.from(e)) ==
-                                                  _selectedBranchId)
-                                      ? _selectedBranchId
-                                      : null,
-                                  decoration: InputDecoration(
-                                    labelText: 'Branch',
-                                    prefixIcon: const Icon(Icons.store_outlined),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.grey[50],
-                                  ),
-                                  items: _publicBranches.map((e) {
-                                    if (e is! Map) return null;
-                                    final b = Map<String, dynamic>.from(e);
-                                    final id = _branchIdOf(b);
-                                    if (id.isEmpty) return null;
-                                    final name = b['name']?.toString() ?? id;
-                                    return DropdownMenuItem<String>(
-                                      value: id,
-                                      child: Text(name),
-                                    );
-                                  }).whereType<DropdownMenuItem<String>>().toList(),
-                                  onChanged: (v) {
-                                    setState(() => _selectedBranchId = v);
-                                    if (v != null) {
-                                      ApiService.instance.setBranchId(v);
-                                    }
-                                  },
-                                ),
-                              ],
                               const SizedBox(height: 24),
 
                               // Login Button
