@@ -116,11 +116,11 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
 
   await localNotifications.show(
-    DateTime.now().millisecondsSinceEpoch,
+    DateTime.now().millisecondsSinceEpoch % 1000000,
     title,
     body,
     NotificationDetails(android: androidDetails, iOS: iosDetails),
-    payload: data['orderId'] ?? 'unknown',
+    payload: data['orderId']?.toString() ?? 'unknown',
   );
 
   print('✅ Background notification displayed');
@@ -194,16 +194,25 @@ class FirebaseMessagingService {
   }
 
   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    print('📱 Foreground Message Received');
+    print('📱 FCM Foreground Message Received!');
+    print('📱 Message ID: ${message.messageId}');
+    print('📱 Topic: ${message.from}');
     print('📱 Data: ${message.data}');
     print('📱 Notification Title: ${message.notification?.title}');
     print('📱 Notification Body: ${message.notification?.body}');
 
     final data = message.data;
+    final title = message.notification?.title?.toLowerCase() ?? '';
+    final body = message.notification?.body?.toLowerCase() ?? '';
+    final type = data['type']?.toString().toLowerCase() ?? '';
 
-    // Check if this is a new order notification
-    bool isNewOrder = data['type'] == 'new_order' ||
-        message.notification?.title?.contains('Order') == true;
+    // Check if this is a new order notification (more lenient check)
+    bool isNewOrder = type == 'new_order' ||
+        type == 'neworder' ||
+        title.contains('order') ||
+        title.contains('nuevo pedido') ||
+        body.contains('order') ||
+        data['orderId'] != null;
 
     if (isNewOrder) {
       print('✅ Processing new order notification');
@@ -215,10 +224,16 @@ class FirebaseMessagingService {
       await showOrderNotification(message);
 
       // Trigger order stream update if data is available
-      if (data.isNotEmpty && data['type'] == 'new_order') {
+      if (data.isNotEmpty) {
         try {
+          // If type is not new_order but we have orderId, treat it as new order
+          final sanitizedData = Map<String, dynamic>.from(data);
+          if (sanitizedData['type'] == null && sanitizedData['orderId'] != null) {
+            sanitizedData['type'] = 'new_order';
+          }
+          
           OrderStreamService.instance
-              .addNewOrder(OrderNotification.fromJson(data));
+              .addNewOrder(OrderNotification.fromJson(sanitizedData));
           print('✅ Order added to stream');
         } catch (e) {
           print('❌ Error adding order to stream: $e');
@@ -311,11 +326,11 @@ class FirebaseMessagingService {
     );
 
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch,
+      DateTime.now().millisecondsSinceEpoch % 1000000,
       title,
       body,
       NotificationDetails(android: androidDetails, iOS: iosDetails),
-      payload: data['orderId'] ?? 'unknown',
+      payload: data['orderId']?.toString() ?? 'unknown',
     );
 
     print('✅ Notification displayed');

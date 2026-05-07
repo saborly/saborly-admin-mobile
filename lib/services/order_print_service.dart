@@ -4,6 +4,10 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
 class OrderPrintService {
+  // Thermal/PDF printers can clip currency glyphs like "€" depending on font support.
+  // Use a text prefix for reliable output across devices.
+  static const String _currencySymbol = 'EUR ';
+
   static Future<void> printOrder(Map<String, dynamic> order) async {
     final pdf = pw.Document();
 
@@ -21,14 +25,18 @@ class OrderPrintService {
 
   static pw.Widget _buildReceipt(Map<String, dynamic> order) {
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
-    
-    // Safely extract numerical values with null safety
+
     final subtotal = _toDouble(order['subtotal']) ?? 0.0;
     final deliveryFee = _toDouble(order['deliveryFee']) ?? 0.0;
     final tax = _toDouble(order['tax']) ?? 0.0;
     final discount = _toDouble(order['discount']) ?? 0.0;
     final total = _toDouble(order['total']) ?? 0.0;
-    
+    final branchName = order['branchName'] ??
+        (order['branchId'] is Map ? order['branchId']['name'] : null);
+    final customerName = _extractCustomerName(order);
+    final customerPhone = _extractCustomerPhone(order);
+    final createdAt = DateTime.tryParse(order['createdAt']?.toString() ?? '') ?? DateTime.now();
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -39,51 +47,43 @@ class OrderPrintService {
               pw.Text(
                 'Saborly',
                 style: pw.TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                'Thank you for your order!',
-                style: const pw.TextStyle(fontSize: 12),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Divider(thickness: 2),
+              pw.SizedBox(height: 2),
+              pw.Text('ORDER RECEIPT', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
             ],
           ),
         ),
+        pw.SizedBox(height: 6),
+        _buildSeparator(thickness: 1.2),
 
-        // Order Details
-        pw.SizedBox(height: 12),
+        // Order details
+        pw.SizedBox(height: 10),
         _buildRow('Order #:', order['orderNumber']?.toString() ?? 'N/A', isBold: true),
-        _buildRow('Date:', dateFormat.format(
-          DateTime.tryParse(order['createdAt']?.toString() ?? '') ?? DateTime.now()
-        )),
-        _buildRow('Type:', (order['deliveryType']?.toString() ?? 'PICKUP').toUpperCase()),
-        
+        _buildRow('Date:', dateFormat.format(createdAt)),
+        _buildRow('Type:', (order['deliveryType']?.toString() ?? 'pickup').toUpperCase()),
+
         pw.SizedBox(height: 8),
-        pw.Divider(),
-        
-        // Customer Info
+        _buildSeparator(),
+
+        // Customer details
         pw.SizedBox(height: 8),
-        pw.Text(
-          'CUSTOMER DETAILS',
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-        ),
+        _buildSectionTitle('CUSTOMER DETAILS'),
         pw.SizedBox(height: 4),
-        _buildRow('Name:', order['userId']?['firstName']?.toString() ?? 'Customer'),
-        _buildRow('Phone:', order['userId']?['phone']?.toString() ?? '---'),
-        
-        if (order['deliveryType']?.toString().toLowerCase() == 'delivery' && 
-            order['deliveryAddress'] != null) ...[
+        _buildRow('Name:', customerName),
+        _buildRow('Phone:', customerPhone),
+        if (branchName != null && branchName.toString().trim().isNotEmpty) _buildRow('Branch:', branchName.toString()),
+
+        if (order['deliveryType']?.toString().toLowerCase() == 'delivery' && order['deliveryAddress'] is Map) ...[
           pw.SizedBox(height: 4),
-          pw.Text('Address:', style: const pw.TextStyle(fontSize: 10)),
+          pw.Text('Address:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
           pw.Text(
             order['deliveryAddress']['address']?.toString() ?? '',
             style: const pw.TextStyle(fontSize: 10),
           ),
-          if (order['deliveryAddress']['apartment'] != null)
+          if (order['deliveryAddress']['apartment'] != null && order['deliveryAddress']['apartment'].toString().trim().isNotEmpty)
             pw.Text(
               order['deliveryAddress']['apartment'].toString(),
               style: const pw.TextStyle(fontSize: 10),
@@ -91,65 +91,54 @@ class OrderPrintService {
         ],
 
         pw.SizedBox(height: 8),
-        pw.Divider(),
+        _buildSeparator(),
 
         // Items
         pw.SizedBox(height: 8),
-        pw.Text(
-          'ORDER ITEMS',
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-        ),
+        _buildSectionTitle('ORDER ITEMS'),
         pw.SizedBox(height: 8),
-
         ...List.generate(
           (order['items'] as List?)?.length ?? 0,
-          (i) => _buildItemRow(order['items'][i]),
+          (i) => _buildItemRow(Map<String, dynamic>.from(order['items'][i] ?? {})),
         ),
 
         pw.SizedBox(height: 8),
-        pw.Divider(),
+        _buildSeparator(),
 
         // Totals
         pw.SizedBox(height: 8),
-        _buildRow('Subtotal:', '\€${subtotal.toStringAsFixed(2)}'),
-        if (deliveryFee > 0)
-          _buildRow('Delivery:', '\€${deliveryFee.toStringAsFixed(2)}'),
-        if (tax > 0)
-          _buildRow('Tax:', '\€${tax.toStringAsFixed(2)}'),
-        if (discount > 0)
-          _buildRow('Discount:', '-\€${discount.toStringAsFixed(2)}'),
-        
+        _buildRow('Subtotal:', _formatMoney(subtotal)),
+        if (deliveryFee > 0) _buildRow('Delivery:', _formatMoney(deliveryFee)),
+        if (tax > 0) _buildRow('Tax:', _formatMoney(tax)),
+        if (discount > 0) _buildRow('Discount:', '-${_formatMoney(discount)}'),
+
         pw.SizedBox(height: 4),
-        pw.Divider(thickness: 2),
+        _buildSeparator(thickness: 1.2),
         pw.SizedBox(height: 4),
-        
         _buildRow(
           'TOTAL:',
-          '\€${total.toStringAsFixed(2)}',
+          _formatMoney(total),
           isBold: true,
-          fontSize: 16,
+          fontSize: 14,
         ),
 
         pw.SizedBox(height: 8),
-        pw.Divider(),
+        _buildSeparator(),
 
         // Payment Info
         pw.SizedBox(height: 8),
-        _buildRow('Payment:', (order['paymentMethod']?.toString() ?? 'COD').toUpperCase()),
-        if (order['codPaymentType'] != null)
-          _buildRow('Pay with:', order['codPaymentType'].toString().toUpperCase()),
+        _buildSectionTitle('PAYMENT'),
+        pw.SizedBox(height: 4),
+        _buildRow('Method:', (order['paymentMethod']?.toString() ?? 'cash-on-delivery').toUpperCase()),
+        if (order['codPaymentType'] != null) _buildRow('Cash Type:', order['codPaymentType'].toString().toUpperCase()),
         _buildRow('Status:', (order['paymentStatus']?.toString() ?? 'PENDING').toUpperCase()),
 
         // Special Instructions
-        if (order['specialInstructions'] != null &&
-            order['specialInstructions'].toString().isNotEmpty) ...[
+        if (order['specialInstructions'] != null && order['specialInstructions'].toString().trim().isNotEmpty) ...[
           pw.SizedBox(height: 8),
-          pw.Divider(),
+          _buildSeparator(),
           pw.SizedBox(height: 8),
-          pw.Text(
-            'SPECIAL INSTRUCTIONS',
-            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-          ),
+          _buildSectionTitle('SPECIAL INSTRUCTIONS'),
           pw.SizedBox(height: 4),
           pw.Text(
             order['specialInstructions'].toString(),
@@ -161,12 +150,12 @@ class OrderPrintService {
         pw.Center(
           child: pw.Column(
             children: [
-              pw.Divider(),
-              pw.SizedBox(height: 8),
+              _buildSeparator(),
+              pw.SizedBox(height: 6),
               pw.Text(
-                'Enjoy your meal!',
+                'Thank you for choosing Saborly',
                 style: pw.TextStyle(
-                  fontSize: 12,
+                  fontSize: 10.5,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
@@ -177,7 +166,47 @@ class OrderPrintService {
     );
   }
 
-  // Helper method to safely convert to double
+  static pw.Widget _buildSectionTitle(String title) {
+    return pw.Text(
+      title,
+      style: pw.TextStyle(
+        fontSize: 11,
+        fontWeight: pw.FontWeight.bold,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  static pw.Widget _buildSeparator({double thickness = 0.8}) {
+    return pw.Divider(thickness: thickness);
+  }
+
+  static String _formatMoney(double amount) {
+    return '$_currencySymbol${amount.toStringAsFixed(2)}';
+  }
+
+  static String _extractCustomerName(Map<String, dynamic> order) {
+    if (order['userId'] is Map) {
+      final user = Map<String, dynamic>.from(order['userId']);
+      final firstName = (user['firstName'] ?? '').toString().trim();
+      final lastName = (user['lastName'] ?? '').toString().trim();
+      final fullName = '$firstName $lastName'.trim();
+      if (fullName.isNotEmpty) return fullName;
+    }
+    final fallback = order['customerName']?.toString().trim();
+    return (fallback == null || fallback.isEmpty) ? 'Customer' : fallback;
+  }
+
+  static String _extractCustomerPhone(Map<String, dynamic> order) {
+    if (order['userId'] is Map) {
+      final user = Map<String, dynamic>.from(order['userId']);
+      final phone = user['phone']?.toString().trim();
+      if (phone != null && phone.isNotEmpty) return phone;
+    }
+    final fallback = order['customerPhone']?.toString().trim();
+    return (fallback == null || fallback.isEmpty) ? 'N/A' : fallback;
+  }
+
   static double? _toDouble(dynamic value) {
     if (value == null) return null;
     if (value is double) return value;
@@ -194,41 +223,51 @@ class OrderPrintService {
   }) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          label,
-          style: pw.TextStyle(
-            fontSize: fontSize,
-            fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        pw.Expanded(
+          flex: 2,
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: fontSize,
+              fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
           ),
         ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(
-            fontSize: fontSize,
-            fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        pw.Expanded(
+          flex: 3,
+          child: pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text(
+              value,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(
+                fontSize: fontSize,
+                fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-static pw.Widget _buildItemRow(Map<String, dynamic> item) {
-    // Extract item name - handle both string and map (multilingual) formats
+  static pw.Widget _buildItemRow(Map<String, dynamic> item) {
+    // Extract item name - supports simple and multilingual map formats
     String itemName = 'Item';
     final foodItemName = item['foodItem']?['name'];
-    
+
     if (foodItemName is String) {
       itemName = foodItemName;
     } else if (foodItemName is Map) {
-      // Get name in preferred order: English > Spanish > Catalan > Arabic
-      itemName = foodItemName['en'] ?? 
-                 foodItemName['es'] ?? 
-                 foodItemName['ca'] ??
-                 foodItemName['ar'] ??
-                 (foodItemName.values.isNotEmpty ? foodItemName.values.first.toString() : 'Item');
+      itemName = foodItemName['en'] ??
+          foodItemName['es'] ??
+          foodItemName['ca'] ??
+          foodItemName['ar'] ??
+          (foodItemName.values.isNotEmpty ? foodItemName.values.first.toString() : 'Item');
     }
-    
+
     final qty = item['quantity'] ?? 1;
     final price = _toDouble(item['totalPrice']) ?? 0.0;
 
@@ -248,12 +287,12 @@ static pw.Widget _buildItemRow(Map<String, dynamic> item) {
               ),
             ),
             pw.Text(
-              '\€${price.toStringAsFixed(2)}',
+              _formatMoney(price),
               style: const pw.TextStyle(fontSize: 11),
             ),
           ],
         ),
-        
+
         // Meal size
         if (item['selectedMealSize'] != null) ...[
           pw.SizedBox(height: 2),
@@ -262,28 +301,27 @@ static pw.Widget _buildItemRow(Map<String, dynamic> item) {
             style: const pw.TextStyle(fontSize: 9),
           ),
         ],
-        
+
         // Extras
-        if (item['selectedExtras'] != null &&
-            (item['selectedExtras'] as List).isNotEmpty) ...[
+        if (item['selectedExtras'] != null && (item['selectedExtras'] as List).isNotEmpty) ...[
           pw.SizedBox(height: 2),
           pw.Text(
             '  Extras: ${(item['selectedExtras'] as List).map((e) => e['name']?.toString() ?? '').join(', ')}',
             style: const pw.TextStyle(fontSize: 9),
           ),
         ],
-        
+
         // Special instructions
-        if (item['specialInstructions'] != null &&
-            item['specialInstructions'].toString().isNotEmpty) ...[
+        if (item['specialInstructions'] != null && item['specialInstructions'].toString().trim().isNotEmpty) ...[
           pw.SizedBox(height: 2),
           pw.Text(
-            'Special Instructions: ${item['specialInstructions']}',
+            '  Note: ${item['specialInstructions']}',
             style: const pw.TextStyle(fontSize: 9),
           ),
         ],
-        
+
         pw.SizedBox(height: 8),
       ],
     );
-  }}
+  }
+}

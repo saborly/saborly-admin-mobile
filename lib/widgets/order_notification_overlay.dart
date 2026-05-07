@@ -168,41 +168,70 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
                         color: const Color(0xFFF7F8FA),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            child: _buildInfoColumn(
-                              Icons.person_outline,
-                              'Customer',
-                              widget.order.customerName,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildInfoColumn(
+                                  Icons.person_outline,
+                                  'Customer',
+                                  '${widget.order.customerName}${widget.order.customerPhone != null ? " (${widget.order.customerPhone})" : ""}',
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 40,
+                                color: Colors.grey[300],
+                              ),
+                              Expanded(
+                                child: _buildInfoColumn(
+                                  widget.order.deliveryType == 'delivery'
+                                      ? Icons.delivery_dining
+                                      : Icons.shopping_bag_outlined,
+                                  'Type',
+                                  widget.order.deliveryType.toUpperCase(),
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 40,
+                                color: Colors.grey[300],
+                              ),
+                              Expanded(
+                                child: _buildInfoColumn(
+                                  Icons.payments_outlined,
+                                  'Total',
+                                  '\€${widget.order.total.toStringAsFixed(2)}',
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (widget.order.branchName != null) ...[
+                            const SizedBox(height: 12),
+                            const Divider(height: 1),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.store_rounded,
+                                  size: 16,
+                                  color: Color(0xFFFF6B35),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Branch: ${widget.order.branchName}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF2D3142),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 40,
-                            color: Colors.grey[300],
-                          ),
-                          Expanded(
-                            child: _buildInfoColumn(
-                              widget.order.deliveryType == 'delivery'
-                                  ? Icons.delivery_dining
-                                  : Icons.shopping_bag_outlined,
-                              'Type',
-                              widget.order.deliveryType.toUpperCase(),
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 40,
-                            color: Colors.grey[300],
-                          ),
-                          Expanded(
-                            child: _buildInfoColumn(
-                              Icons.payments_outlined,
-                              'Total',
-                              '\${widget.order.total.toStringAsFixed(2)}',
-                            ),
-                          ),
+                          ],
                         ],
                       ),
                     ),

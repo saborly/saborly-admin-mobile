@@ -1,4 +1,5 @@
 // screens/orders_dashboard_screen.dart
+import 'package:Saborly_admin/providers/auth_provider.dart';
 import 'package:Saborly_admin/screens/auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -17,13 +18,23 @@ class OrdersDashboardScreen extends StatefulWidget {
   State<OrdersDashboardScreen> createState() => _OrdersDashboardScreenState();
 }
 
-class _OrdersDashboardScreenState extends State<OrdersDashboardScreen> 
+class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     with SingleTickerProviderStateMixin {
+  static const Color _brandPrimary = Color(0xFF4A148C);
+  static const Color _brandSecondary = Color(0xFF7C3AED);
+
   OverlayEntry? _overlayEntry;
   StreamSubscription? _orderSubscription;
   late TabController _tabController;
-  
-final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready', 'Delivered'];
+
+  final List<String> _tabs = [
+    'All',
+    'Pending',
+    'Confirmed',
+    'Preparing',
+    'Ready',
+    'Delivered'
+  ];
   @override
   void initState() {
     super.initState();
@@ -44,13 +55,19 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
         final orderData = {
           '_id': order.orderId,
           'orderNumber': order.orderNumber,
-          'userId': {'firstName': order.customerName},
+          'userId': {
+            'firstName': order.customerName,
+            'phone': order.customerPhone,
+          },
+          'branchId': {
+            'name': order.branchName,
+          },
           'total': order.total,
           'deliveryType': order.deliveryType,
           'status': order.status,
           'createdAt': order.createdAt.toIso8601String(),
         };
-        
+
         context.read<OrderProvider>().addNewOrder(orderData);
         _showOrderOverlay(order);
       },
@@ -231,7 +248,6 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
           (route) => false,
         );
       }
-
     } catch (e) {
       debugPrint('Logout error: $e');
       if (mounted) {
@@ -266,6 +282,10 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
 
   bool get _isTablet => MediaQuery.of(context).size.width >= 600;
   bool get _isLargeTablet => MediaQuery.of(context).size.width >= 900;
+  String _formatAmount(dynamic amount) {
+    final parsed = amount is num ? amount.toDouble() : double.tryParse(amount?.toString() ?? '0') ?? 0.0;
+    return 'EUR ${parsed.toStringAsFixed(2)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -297,34 +317,59 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
           left: _isTablet ? 32 : 20,
           bottom: 20,
         ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E40AF), Color(0xFF3B82F6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1E40AF).withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+        title: Consumer<AuthProvider>(
+          builder: (context, auth, _) => Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [_brandPrimary, _brandSecondary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ],
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _brandPrimary.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.receipt_long_rounded,
+                  color: Colors.white,
+                  size: _isTablet ? 22 : 20,
+                ),
               ),
-              child: Icon(
-                Icons.receipt_long_rounded,
-                color: Colors.white,
-                size: _isTablet ? 22 : 20,
+              SizedBox(width: _isTablet ? 14 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Orders',
+                      style: TextStyle(
+                        fontSize: _isTablet ? 18 : 16,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    Text(
+                      auth.selectedBranch?.name ?? 'No Branch Selected',
+                      style: TextStyle(
+                        fontSize: _isTablet ? 12 : 11,
+                        color: const Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            SizedBox(width: _isTablet ? 14 : 12),
-           
-          ],
+            ],
+          ),
         ),
       ),
       bottom: PreferredSize(
@@ -343,11 +388,18 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
         ),
       ),
       actions: [
+        _buildActionButton(
+          icon: Icons.store_rounded,
+          color: _brandSecondary,
+          onTap: () => _showBranchSwitchDialog(context),
+          tooltip: 'Switch Branch',
+        ),
         Consumer<OrderProvider>(
           builder: (context, provider, _) => _buildActionButton(
-            icon: provider.autoPrintEnabled ? Icons.print : Icons.print_disabled,
-            color: provider.autoPrintEnabled 
-                ? const Color(0xFF1E40AF)
+            icon:
+                provider.autoPrintEnabled ? Icons.print : Icons.print_disabled,
+            color: provider.autoPrintEnabled
+                ? _brandPrimary
                 : const Color(0xFF94A3B8),
             onTap: _showSettingsDialog,
             tooltip: 'Settings',
@@ -415,7 +467,7 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
       child: Consumer<OrderProvider>(
         builder: (context, provider, _) {
           final stats = provider.getTodayStats();
-          
+
           return Container(
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -504,9 +556,9 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
   }
 
   Widget _buildStatCard(
-    String value, 
-    String label, 
-    Color color, 
+    String value,
+    String label,
+    Color color,
     IconData icon,
     Color bgColor,
   ) {
@@ -550,8 +602,8 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
               ],
             ),
             child: Icon(
-              icon, 
-              color: color, 
+              icon,
+              color: color,
               size: _isTablet ? 24 : 22,
             ),
           ),
@@ -620,12 +672,11 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
             labelPadding: EdgeInsets.symmetric(
               horizontal: _isTablet ? 16 : 12,
             ),
-      indicator: UnderlineTabIndicator(
-  borderSide: const BorderSide(width: 6, color: Color(0xFF2563EB)),
-  borderRadius: BorderRadius.circular(2),
-),
-
-            labelColor: Colors.green,
+            indicator: UnderlineTabIndicator(
+              borderSide: const BorderSide(width: 6, color: _brandPrimary),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            labelColor: _brandPrimary,
             unselectedLabelColor: const Color(0xFF64748B),
             labelStyle: TextStyle(
               fontWeight: FontWeight.w700,
@@ -638,10 +689,10 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
             tabs: _tabs.map((tab) {
               return Consumer<OrderProvider>(
                 builder: (context, provider, _) {
-                  final count = tab == 'All' 
-                      ? provider.orders.length 
+                  final count = tab == 'All'
+                      ? provider.orders.length
                       : provider.getStatusCount(tab.toLowerCase());
-                  
+
                   return Tab(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -656,8 +707,9 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                             ),
                             decoration: BoxDecoration(
                               color: _tabController.index == _tabs.indexOf(tab)
-                                  ? Colors.green.withOpacity(0.3)
-                                  : _getStatusColor(tab.toLowerCase()).withOpacity(0.12),
+                                  ? _brandPrimary.withOpacity(0.16)
+                                  : _getStatusColor(tab.toLowerCase())
+                                      .withOpacity(0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -665,9 +717,10 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
-                                color: _tabController.index == _tabs.indexOf(tab)
-                                    ? Colors.black54
-                                    : _getStatusColor(tab.toLowerCase()),
+                                color:
+                                    _tabController.index == _tabs.indexOf(tab)
+                                        ? _brandPrimary
+                                        : _getStatusColor(tab.toLowerCase()),
                               ),
                             ),
                           ),
@@ -832,9 +885,8 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
         return RefreshIndicator(
           onRefresh: () => provider.loadOrders(),
           color: const Color(0xFF1E40AF),
-          child: _isLargeTablet
-              ? _buildGridView(orders)
-              : _buildListView(orders),
+          child:
+              _isLargeTablet ? _buildGridView(orders) : _buildListView(orders),
         );
       },
     );
@@ -873,14 +925,14 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
         color: Colors.white,
         borderRadius: BorderRadius.circular(_isTablet ? 16 : 14),
         border: Border.all(
-          color: isUrgent 
+          color: isUrgent
               ? const Color(0xFFDC2626).withOpacity(0.3)
               : const Color(0xFFE2E8F0),
           width: isUrgent ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: isUrgent 
+            color: isUrgent
                 ? const Color(0xFFDC2626).withOpacity(0.08)
                 : Colors.black.withOpacity(0.04),
             blurRadius: 12,
@@ -941,7 +993,8 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                           gradient: const LinearGradient(
                             colors: [Color(0xFFFEE2E2), Color(0xFFFECDD3)],
                           ),
-                          borderRadius: BorderRadius.circular(_isTablet ? 8 : 7),
+                          borderRadius:
+                              BorderRadius.circular(_isTablet ? 8 : 7),
                         ),
                         child: Row(
                           children: [
@@ -1021,7 +1074,10 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            order['userId']?['firstName'] ?? 'Customer',
+                            (order['userId'] is Map
+                                    ? order['userId']['firstName']
+                                    : null) ??
+                                'Customer',
                             style: TextStyle(
                               fontSize: _isTablet ? 16 : 15,
                               fontWeight: FontWeight.w700,
@@ -1030,6 +1086,20 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if ((order['userId'] is Map &&
+                                  order['userId']['phone'] != null) ||
+                              order['customerPhone'] != null)
+                            Text(
+                              (order['userId'] is Map
+                                      ? order['userId']['phone']
+                                      : order['customerPhone']) ??
+                                  '',
+                              style: TextStyle(
+                                fontSize: _isTablet ? 13 : 12,
+                                color: const Color(0xFF1E40AF),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1056,7 +1126,8 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                                 ),
                                 const SizedBox(width: 5),
                                 Text(
-                                  (order['deliveryType'] ?? 'pickup').toUpperCase(),
+                                  (order['deliveryType'] ?? 'pickup')
+                                      .toUpperCase(),
                                   style: TextStyle(
                                     fontSize: _isTablet ? 10 : 9,
                                     color: order['deliveryType'] == 'delivery'
@@ -1077,7 +1148,7 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '\€${(order['total'] ?? 0).toStringAsFixed(2)}',
+                          _formatAmount(order['total'] ?? 0),
                           style: TextStyle(
                             fontSize: _isTablet ? 22 : 20,
                             fontWeight: FontWeight.w900,
@@ -1085,7 +1156,6 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                             letterSpacing: -0.5,
                           ),
                         ),
-
                         const SizedBox(height: 2),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1109,9 +1179,74 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
                     ),
                   ],
                 ),
+                if ((order['branchId'] is Map &&
+                        order['branchId']['name'] != null) ||
+                    order['branchName'] != null) ...[
+                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.store_rounded,
+                        size: 14,
+                        color: Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Branch: ${order['branchId'] is Map ? order['branchId']['name'] : order['branchName']}',
+                        style: TextStyle(
+                          fontSize: _isTablet ? 12 : 11,
+                          color: const Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showBranchSwitchDialog(BuildContext context) {
+    final authProvider = context.read<AuthProvider>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Switch Branch'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: authProvider.branches.map((branch) {
+            final isSelected = branch.id == authProvider.selectedBranch?.id;
+            return ListTile(
+              leading: Icon(
+                Icons.store_rounded,
+                color: isSelected ? const Color(0xFF1E40AF) : Colors.grey,
+              ),
+              title: Text(
+                branch.name,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? const Color(0xFF1E40AF) : Colors.black87,
+                ),
+              ),
+              trailing: isSelected
+                  ? const Icon(Icons.check_circle, color: Color(0xFF1E40AF))
+                  : null,
+              onTap: () {
+                Navigator.pop(context);
+                if (!isSelected) {
+                  authProvider.setSelectedBranch(branch);
+                  _loadOrders(); // Re-fetch all data for new branch
+                }
+              },
+            );
+          }).toList(),
         ),
       ),
     );
@@ -1240,16 +1375,12 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
       secondary: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: value 
-              ? const Color(0xFFDCEAFF)
-              : const Color(0xFFF1F5F9),
+          color: value ? const Color(0xFFDCEAFF) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(
           icon,
-          color: value 
-              ? const Color(0xFF1E40AF)
-              : const Color(0xFF94A3B8),
+          color: value ? const Color(0xFF1E40AF) : const Color(0xFF94A3B8),
           size: 20,
         ),
       ),
@@ -1292,8 +1423,8 @@ final List<String> _tabs = ['All', 'Pending', 'Confirmed', 'Preparing', 'Ready',
         return const Color(0xFF7C3AED);
       case 'ready':
         return const Color(0xFF059669);
-    case 'delivered':
-  return const Color(0xFF0891B2);
+      case 'delivered':
+        return const Color(0xFF0891B2);
       case 'completed':
         return const Color(0xFF047857);
       case 'cancelled':

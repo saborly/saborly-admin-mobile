@@ -9,7 +9,9 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+
     compileOptions {
+        coreLibraryDesugaringEnabled true
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
@@ -31,6 +33,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode + 1
         versionName = flutter.versionName
+        multiDexEnabled true
     }
 
     signingConfigs {
@@ -60,4 +63,5 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:34.1.0')
     implementation 'com.google.firebase:firebase-messaging'
     implementation 'androidx.multidex:multidex:2.0.1'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }

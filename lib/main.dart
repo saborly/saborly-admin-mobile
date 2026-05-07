@@ -9,6 +9,7 @@ import 'package:Saborly_admin/screens/orders_dashboard_screen.dart';
 import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
 import 'package:Saborly_admin/services/order_provider.dart';
+import 'package:Saborly_admin/providers/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,8 +25,8 @@ void main() async {
   // Initialize Firebase Messaging
   await FirebaseMessagingService.initialize();
   
-  // Initialize API Service token
-  await ApiService.instance.initToken();
+  // Initialize API Service
+  await ApiService.instance.initialize();
   
   // Get and save FCM token
   await _initializeFCMToken();
@@ -47,13 +48,8 @@ Future<void> _initializeFCMToken() async {
     
     // Get stored token
     final prefs = await SharedPreferences.getInstance();
-    final storedToken = prefs.getString('fcm_token');
     final authToken = prefs.getString('auth_token');
-    
-    // Check if token has changed
-    final tokenChanged = storedToken != fcmToken;
-    
-  
+
     await prefs.setString('fcm_token', fcmToken);
     
     // If user is logged in, update token on backend
@@ -106,37 +102,125 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const primary = Color(0xFF4A148C);
+    const secondary = Color(0xFF7C3AED);
+    const surface = Color(0xFFFFFFFF);
+    const scaffoldBg = Color(0xFFF6F7FB);
+
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => OrderProvider()),
       ],
       child: MaterialApp(
         title: 'Saborly Admin',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          primarySwatch: Colors.deepPurple,
-          scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+          useMaterial3: true,
+          scaffoldBackgroundColor: scaffoldBg,
           fontFamily: 'Poppins',
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF4A148C),
+            seedColor: primary,
             brightness: Brightness.light,
+            primary: primary,
+            secondary: secondary,
+            surface: surface,
           ),
+          textTheme: ThemeData.light().textTheme.apply(
+                bodyColor: const Color(0xFF111827),
+                displayColor: const Color(0xFF111827),
+              ),
           cardTheme: CardThemeData(
-            elevation: 2.0,
+            elevation: 0,
+            color: surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
           ),
           appBarTheme: const AppBarTheme(
             elevation: 0,
-            centerTitle: true,
+            centerTitle: false,
+            backgroundColor: Colors.white,
+            foregroundColor: Color(0xFF0F172A),
+            surfaceTintColor: Colors.transparent,
+            titleTextStyle: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F172A),
+              fontFamily: 'Poppins',
+            ),
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              elevation: 0,
+              backgroundColor: primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
+              textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+            ),
+          ),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primary,
+              side: const BorderSide(color: Color(0xFFD1D5DB)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            labelStyle: const TextStyle(color: Color(0xFF475569)),
+            hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+            prefixIconColor: const Color(0xFF64748B),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: primary, width: 1.4),
+            ),
+          ),
+          snackBarTheme: SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: const Color(0xFF1F2937),
+            contentTextStyle: const TextStyle(color: Colors.white),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          dividerTheme: const DividerThemeData(
+            color: Color(0xFFE5E7EB),
+            thickness: 1,
+            space: 1,
+          ),
+          progressIndicatorTheme: const ProgressIndicatorThemeData(
+            color: primary,
+          ),
+          chipTheme: ChipThemeData(
+            selectedColor: primary.withOpacity(0.12),
+            backgroundColor: const Color(0xFFF1F5F9),
+            labelStyle: const TextStyle(color: Color(0xFF1E293B), fontSize: 12),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          dialogTheme: DialogThemeData(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
             ),
           ),
         ),
@@ -165,47 +249,19 @@ class _SplashScreenState extends State<SplashScreen> {
     // Show splash for at least 2 seconds
     await Future.delayed(const Duration(seconds: 2));
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
+    if (!mounted) return;
+    
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.initialize();
 
     if (mounted) {
-      if (token != null) {
-        // User is logged in
-        ApiService.instance.setAuthToken(token);
-        
-        // Verify token is still valid
-        try {
-          await ApiService.instance.getProfile();
-          
-          // Re-sync FCM token after successful auth verification
-          final fcmToken = prefs.getString('fcm_token');
-          if (fcmToken != null) {
-            try {
-              print('🔄 Re-syncing FCM token with backend...');
-              await ApiService.instance.updateFCMToken(
-                fcmToken: fcmToken,
-                platform: 'android',
-              );
-              print('✅ FCM token re-synced successfully');
-            } catch (e) {
-              print('❌ Error re-syncing FCM token: $e');
-            }
-          }
-          
-          // Token is valid, go to dashboard
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const OrdersDashboardScreen()),
-          );
-        } catch (e) {
-          // Token is invalid, clear it and go to login
-          print('❌ Auth token invalid: $e');
-          await prefs.clear();
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-          );
-        }
+      if (authProvider.isAuthenticated && authProvider.selectedBranch != null) {
+        // User is logged in and branch is selected
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const OrdersDashboardScreen()),
+        );
       } else {
-        // User is not logged in
+        // User is not logged in or branch not selected
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
         );
@@ -253,19 +309,20 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 32),
               const Text(
-                'Saborly Food Kitchen',
+                'Saborly Admin',
                 style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
                   color: Colors.white,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Admin Panel',
+                'Order Management Console',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 16,
                   color: Colors.white.withOpacity(0.9),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 48),

@@ -7,6 +7,8 @@ class OrderNotification {
   final DateTime createdAt;
   final String status;
   final bool isUrgent;
+  final String? branchName;
+  final String? customerPhone;
 
   OrderNotification({
     required this.orderId,
@@ -17,6 +19,8 @@ class OrderNotification {
     required this.createdAt,
     required this.status,
     this.isUrgent = false,
+    this.branchName,
+    this.customerPhone,
   });
 
   factory OrderNotification.fromJson(Map<String, dynamic> json) {
@@ -38,6 +42,10 @@ class OrderNotification {
       orderId: json['_id'] ?? json['orderId'] ?? '',
       orderNumber: json['orderNumber'] ?? '',
       customerName: customerName,
+      customerPhone: json['customerPhone'] ?? 
+                     (json['userId'] is Map ? json['userId']['phone'] : null),
+      branchName: json['branchName'] ?? 
+                  (json['branchId'] is Map ? json['branchId']['name'] : null),
       total: json['total'] is String
           ? double.tryParse(json['total'] as String) ?? 0.0
           : (json['total'] as num?)?.toDouble() ?? 0.0,
@@ -56,6 +64,8 @@ class OrderNotification {
       '_id': orderId,
       'orderNumber': orderNumber,
       'customerName': customerName,
+      'customerPhone': customerPhone,
+      'branchName': branchName,
       'total': total,
       'deliveryType': deliveryType,
       'createdAt': createdAt.toIso8601String(),

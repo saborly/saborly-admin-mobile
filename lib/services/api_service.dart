@@ -1,12 +1,13 @@
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
   static final ApiService instance = ApiService._internal();
   factory ApiService() => instance;
+
   final Dio _dio = Dio(
     BaseOptions(
-      baseUrl: 'https://saborly-backend.vercel.app/api/v1',
+      baseUrl: 'https://api.saborly.es/api/v1',
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
       headers: {
@@ -15,51 +16,72 @@ class ApiService {
     ),
   );
 
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
   String? _authToken;
+  String? _branchId;
+
+  // lib/services/api_service.dart
 
   ApiService._internal() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        final prefs = await SharedPreferences.getInstance();
-        final bid = prefs.getString('branch_id');
-        if (bid != null && bid.isNotEmpty) {
-          options.headers['X-Branch-Id'] = bid;
+        // ONLY attach if not null and not empty
+        if (_authToken != null && _authToken!.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $_authToken';
         }
-        handler.next(options);
+
+        // ONLY attach branch ID for non-public routes
+        if (_branchId != null &&
+            _branchId!.isNotEmpty &&
+            !options.path.contains('public')) {
+          options.headers['X-Branch-Id'] = _branchId;
+        }
+
+        print('🌐 Request: ${options.method} ${options.path}');
+        return handler.next(options);
+      },
+      onError: (DioException e, handler) {
+        print('❌ API Error: ${e.response?.statusCode} - ${e.message}');
+        print('❌ Response Data: ${e.response?.data}');
+        return handler.next(e);
       },
     ));
   }
 
-  // Initialize token from storage
-  Future<void> initToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
+  // Initialize from storage
+  Future<void> initialize() async {
+    _authToken = await _storage.read(key: 'auth_token');
+    _branchId = await _storage.read(key: 'branch_id');
+  }
+
+  void setAuthToken(String? token) {
+    _authToken = token;
     if (token != null) {
-      setAuthToken(token);
+      _storage.write(key: 'auth_token', value: token);
+    } else {
+      _storage.delete(key: 'auth_token');
     }
   }
 
-  void setAuthToken(String token) {
-    _authToken = token;
-    _dio.options.headers['Authorization'] = 'Bearer $token';
+// Change 'void' to 'Future<void>' and add 'async'
+  Future<void> setBranchId(String? id) async {
+    _branchId = id;
+    if (id != null) {
+      await _storage.write(key: 'branch_id', value: id);
+    } else {
+      await _storage.delete(key: 'branch_id');
+    }
   }
 
-  Future<void> setBranchId(String id) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('branch_id', id);
-  }
-
-  Future<void> clearBranchId() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('branch_id');
-  }
+  String? get authToken => _authToken;
+  String? get branchId => _branchId;
 
   // ==================== AUTH ENDPOINTS ====================
 
-  // Login
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
+    required String branchId,
   }) async {
     try {
       final response = await _dio.post(
@@ -67,34 +89,43 @@ class ApiService {
         data: {
           'email': email,
           'password': password,
+          'branchId': branchId,
         },
       );
-
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
+// lib/services/api_service.dart
 
-  Future<Map<String, dynamic>> getPublicBranches() async {
-    try {
-      final response = await _dio.get('/branches/public');
-      return Map<String, dynamic>.from(response.data as Map);
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
+// Add this alongside your other methods:
   Future<Map<String, dynamic>> getBranches() async {
     try {
       final response = await _dio.get('/branches');
-      return Map<String, dynamic>.from(response.data as Map);
+      if (response.data is List) {
+        return {'branches': response.data};
+      }
+      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
-  // Get Profile
+// Also updating getPublicBranches to return a Map for consistency
+// Change return type to Future<Map<String, dynamic>>
+  Future<Map<String, dynamic>> getPublicBranches() async {
+    try {
+      final response = await _dio.get('/branches/public');
+      if (response.data is List) {
+        return {'branches': response.data};
+      }
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> getProfile() async {
     try {
       final response = await _dio.get('/auth/profile');
@@ -104,24 +135,13 @@ class ApiService {
     }
   }
 
-  // Logout
   Future<void> logout() async {
     try {
       await _dio.post('/auth/logout');
-      
-      // Clear local storage
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('auth_token');
-      await prefs.remove('branch_id');
-      await prefs.remove('user_id');
-      await prefs.remove('user_name');
-      await prefs.remove('user_email');
-      await prefs.remove('user_role');
-      
-      _authToken = null;
-      _dio.options.headers.remove('Authorization');
-    } on DioException catch (e) {
-      throw _handleError(e);
+    } finally {
+      setAuthToken(null);
+      setBranchId(null);
+      await _storage.deleteAll();
     }
   }
 
@@ -140,7 +160,6 @@ class ApiService {
           'platform': platform,
         },
       );
-
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
@@ -149,36 +168,45 @@ class ApiService {
 
   // ==================== ORDER ENDPOINTS ====================
 
-  // Get Order Details
   Future<Map<String, dynamic>> getOrderDetails(String orderId) async {
     try {
       final response = await _dio.get('/orders/$orderId');
-      return response.data['order'];
+      if (response.data is Map && response.data['order'] != null) {
+        return response.data['order'];
+      }
+      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
- Future<List<dynamic>> getAllOrders({
-  String? status,
-  int page = 1,
-  int limit = 20,
-}) async {
-  try {
-    final response = await _dio.get(
-      '/orders/getall',
-      queryParameters: {
-        if (status != null && status != 'all') 'status': status,
-        'page': page,
-        'limit': limit,
-      },
-    );
-    return response.data['orders'] as List<dynamic>;
-  } on DioException catch (e) {
-    throw _handleError(e);
+  Future<List<dynamic>> getOrders({
+    String? status,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/orders/getall',
+        queryParameters: {
+          if (status != null && status != 'all') 'status': status,
+          'page': page,
+          'limit': limit,
+          'sort': '-createdAt',
+        },
+      );
+      if (response.data is List) {
+        return response.data;
+      }
+      if (response.data is Map && response.data['orders'] != null) {
+        return response.data['orders'];
+      }
+      return [];
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
-}
-  // Update Order Status
+
   Future<Map<String, dynamic>> updateOrderStatus({
     required String orderId,
     required String status,
@@ -192,14 +220,12 @@ class ApiService {
           if (message != null) 'message': message,
         },
       );
-
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
-  // Cancel Order
   Future<Map<String, dynamic>> cancelOrder({
     required String orderId,
     required String reason,
@@ -211,14 +237,12 @@ class ApiService {
           'reason': reason,
         },
       );
-
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
-  // Get Order Statistics
   Future<Map<String, dynamic>> getOrderStats({
     DateTime? startDate,
     DateTime? endDate,
@@ -231,30 +255,10 @@ class ApiService {
           if (endDate != null) 'endDate': endDate.toIso8601String(),
         },
       );
-
-      return response.data['stats'];
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<List<dynamic>> getOrders({
-    String? status,
-    int page = 1,
-    int limit = 20,
-  }) async {
-    try {
-      final response = await _dio.get(
-     '/orders/getall',
-        queryParameters: {
-          if (status != null) 'status': status,
-          'page': page,
-          'limit': limit,
-          'sort': '-createdAt',
-        },
-      );
-
-      return response.data['orders'];
+      if (response.data is Map && response.data['stats'] != null) {
+        return response.data['stats'];
+      }
+      return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -265,12 +269,9 @@ class ApiService {
   String _handleError(DioException error) {
     if (error.response != null) {
       final data = error.response?.data;
-      
-      // Handle different error formats
       if (data is Map<String, dynamic>) {
         return data['message'] ?? 'An error occurred';
       }
-      
       return 'An error occurred';
     } else if (error.type == DioExceptionType.connectionTimeout) {
       return 'Connection timeout. Please check your internet connection.';

@@ -142,7 +142,11 @@ class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
                         radius: 24,
                         backgroundColor: Theme.of(context).colorScheme.primary,
                         child: Text(
-                          userData['name']!.split(' ').map((e) => e[0]).take(2).join(),
+                          userData['name']!
+                              .split(' ')
+                              .map((e) => e[0])
+                              .take(2)
+                              .join(),
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -180,7 +184,8 @@ class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _getRoleColor(userData['role']!).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -362,7 +367,11 @@ class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
                   radius: 40,
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   child: Text(
-                    userData['name']!.split(' ').map((e) => e[0]).take(2).join(),
+                    userData['name']!
+                        .split(' ')
+                        .map((e) => e[0])
+                        .take(2)
+                        .join(),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -387,7 +396,8 @@ class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: _getRoleColor(userData['role']!).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
