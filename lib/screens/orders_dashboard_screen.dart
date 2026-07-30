@@ -9,6 +9,8 @@ import 'package:Saborly_admin/services/order_provider.dart';
 import 'package:Saborly_admin/services/order_stream_service.dart';
 import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/widgets/order_notification_overlay.dart';
+import 'package:Saborly_admin/services/firebase_messaging_service.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 
 class OrdersDashboardScreen extends StatefulWidget {
@@ -41,6 +43,17 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     _tabController = TabController(length: _tabs.length, vsync: this);
     _listenToNewOrders();
     _loadOrders();
+    context.read<AuthProvider>().addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isAuthenticated && mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+        (route) => false,
+      );
+    }
   }
 
   void _loadOrders() {
@@ -95,8 +108,11 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
   }
 
   void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+      FirebaseMessagingService.stopOrderSound();
+    }
   }
 
   void _navigateToOrderDetails(String orderId) {
@@ -274,6 +290,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
 
   @override
   void dispose() {
+    context.read<AuthProvider>().removeListener(_onAuthChanged);
     _removeOverlay();
     _orderSubscription?.cancel();
     _tabController.dispose();
@@ -479,74 +496,69 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
               ),
             ),
             padding: EdgeInsets.fromLTRB(
-              _isTablet ? 32 : 20,
+              _isTablet ? 32 : 16,
+              _isTablet ? 20 : 16,
+              _isTablet ? 32 : 16,
               _isTablet ? 24 : 20,
-              _isTablet ? 32 : 20,
-              _isTablet ? 32 : 28,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Today\'s Overview',
-                  style: TextStyle(
-                    fontSize: _isTablet ? 16 : 15,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, bottom: 12),
+                  child: Text(
+                    "Today's Overview",
+                    style: GoogleFonts.inter(
+                      fontSize: _isTablet ? 13 : 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF94A3B8),
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
-                SizedBox(height: _isTablet ? 16 : 14),
-                _isLargeTablet
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              stats['totalOrders'].toString(),
-                              'Total Orders',
-                              const Color(0xFF1E40AF),
-                              Icons.receipt_long_rounded,
-                              const Color(0xFFDCEAFF),
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: _buildStatCard(
-                              stats['completedOrders'].toString(),
-                              'Completed',
-                              const Color(0xFF059669),
-                              Icons.check_circle_rounded,
-                              const Color(0xFFD1FAE5),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildStatCard(
-                                  stats['totalOrders'].toString(),
-                                  'Total Orders',
-                                  const Color(0xFF1E40AF),
-                                  Icons.receipt_long_rounded,
-                                  const Color(0xFFDCEAFF),
-                                ),
-                              ),
-                              SizedBox(width: _isTablet ? 16 : 14),
-                              Expanded(
-                                child: _buildStatCard(
-                                  stats['completedOrders'].toString(),
-                                  'Completed',
-                                  const Color(0xFF059669),
-                                  Icons.check_circle_rounded,
-                                  const Color(0xFFD1FAE5),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        stats['totalOrders'].toString(),
+                        'Total',
+                        const Color(0xFF4A148C),
+                        Icons.receipt_long_rounded,
+                        const Color(0xFFF3E5FF),
                       ),
+                    ),
+                    SizedBox(width: _isTablet ? 12 : 10),
+                    Expanded(
+                      child: _buildStatCard(
+                        stats['pendingOrders'].toString(),
+                        'Pending',
+                        const Color(0xFFEA580C),
+                        Icons.pending_actions_rounded,
+                        const Color(0xFFFFF0E6),
+                      ),
+                    ),
+                    SizedBox(width: _isTablet ? 12 : 10),
+                    Expanded(
+                      child: _buildStatCard(
+                        stats['completedOrders'].toString(),
+                        'Done',
+                        const Color(0xFF059669),
+                        Icons.check_circle_rounded,
+                        const Color(0xFFE6FAF3),
+                      ),
+                    ),
+                    SizedBox(width: _isTablet ? 12 : 10),
+                    Expanded(
+                      child: _buildStatCard(
+                        '€${(stats['revenue'] as double).toStringAsFixed(0)}',
+                        'Revenue',
+                        const Color(0xFF0891B2),
+                        Icons.payments_rounded,
+                        const Color(0xFFE0F6FB),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           );
@@ -563,74 +575,46 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     Color bgColor,
   ) {
     return Container(
-      padding: EdgeInsets.all(_isTablet ? 20 : 18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            bgColor,
-            bgColor.withOpacity(0.5),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(_isTablet ? 16 : 14),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+      padding: EdgeInsets.symmetric(
+        horizontal: _isTablet ? 14 : 10,
+        vertical: _isTablet ? 16 : 12,
       ),
-      child: Row(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: EdgeInsets.all(_isTablet ? 14 : 12),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(_isTablet ? 12 : 10),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: _isTablet ? 24 : 22,
-            ),
+            child: Icon(icon, color: color, size: _isTablet ? 18 : 16),
           ),
-          SizedBox(width: _isTablet ? 16 : 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    color: const Color(0xFF0F172A),
-                    fontSize: _isTablet ? 32 : 28,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: const Color(0xFF64748B),
-                    fontSize: _isTablet ? 13 : 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          SizedBox(height: _isTablet ? 10 : 8),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: const Color(0xFF0F172A),
+              fontSize: _isTablet ? 22 : 18,
+              fontWeight: FontWeight.w800,
+              height: 1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: const Color(0xFF64748B),
+              fontSize: _isTablet ? 12 : 11,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -643,47 +627,45 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
       child: Container(
         color: const Color(0xFFF8FAFC),
         padding: EdgeInsets.fromLTRB(
-          _isTablet ? 32 : 0,
-          _isTablet ? 16 : 0,
-          _isTablet ? 32 : 0,
-          _isTablet ? 8 : 6,
+          _isTablet ? 32 : 16,
+          10,
+          _isTablet ? 32 : 16,
+          6,
         ),
         child: Container(
-          height: _isTablet ? 50 : 46,
+          height: _isTablet ? 48 : 44,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(_isTablet ? 12 : 10),
-            border: Border.all(
-              color: const Color(0xFFE2E8F0),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            color: const Color(0xFFEEF2FF),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: TabBar(
             controller: _tabController,
             isScrollable: true,
-            padding: EdgeInsets.zero,
+            padding: const EdgeInsets.all(4),
             labelPadding: EdgeInsets.symmetric(
-              horizontal: _isTablet ? 16 : 12,
+              horizontal: _isTablet ? 14 : 10,
             ),
-            indicator: UnderlineTabIndicator(
-              borderSide: const BorderSide(width: 6, color: _brandPrimary),
-              borderRadius: BorderRadius.circular(2),
+            indicator: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
             labelColor: _brandPrimary,
             unselectedLabelColor: const Color(0xFF64748B),
-            labelStyle: TextStyle(
+            labelStyle: GoogleFonts.inter(
               fontWeight: FontWeight.w700,
-              fontSize: _isTablet ? 15 : 14,
+              fontSize: _isTablet ? 13 : 12,
             ),
-            unselectedLabelStyle: TextStyle(
-              fontWeight: FontWeight.w600,
+            unselectedLabelStyle: GoogleFonts.inter(
+              fontWeight: FontWeight.w500,
               fontSize: _isTablet ? 13 : 12,
             ),
             tabs: _tabs.map((tab) {
@@ -699,28 +681,23 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                       children: [
                         Text(tab),
                         if (count > 0) ...[
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
+                              horizontal: 5,
+                              vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: _tabController.index == _tabs.indexOf(tab)
-                                  ? _brandPrimary.withOpacity(0.16)
-                                  : _getStatusColor(tab.toLowerCase())
-                                      .withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
+                              color: _getStatusColor(tab.toLowerCase())
+                                  .withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(5),
                             ),
                             child: Text(
                               count.toString(),
-                              style: TextStyle(
+                              style: GoogleFonts.inter(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color:
-                                    _tabController.index == _tabs.indexOf(tab)
-                                        ? _brandPrimary
-                                        : _getStatusColor(tab.toLowerCase()),
+                                fontWeight: FontWeight.w700,
+                                color: _getStatusColor(tab.toLowerCase()),
                               ),
                             ),
                           ),
@@ -920,291 +897,214 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     final isUrgent = _isOrderUrgent(order);
     final statusColor = _getStatusColor(status);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_isTablet ? 16 : 14),
-        border: Border.all(
-          color: isUrgent
-              ? const Color(0xFFDC2626).withOpacity(0.3)
-              : const Color(0xFFE2E8F0),
-          width: isUrgent ? 2 : 1,
+    final accentColor = isUrgent ? const Color(0xFFDC2626) : statusColor;
+    final phone = (order['userId'] is Map ? order['userId']['phone'] : order['customerPhone']) as String?;
+    final customerName = (order['userId'] is Map ? order['userId']['firstName'] : null) ?? 'Customer';
+    final branchName = order['branchId'] is Map ? order['branchId']['name'] : order['branchName'];
+    final isDelivery = order['deliveryType'] == 'delivery';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
+          border: Border.all(color: const Color(0xFFE8ECF0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: isUrgent
-                ? const Color(0xFFDC2626).withOpacity(0.08)
-                : Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _navigateToOrderDetails(order['_id']),
-          borderRadius: BorderRadius.circular(_isTablet ? 16 : 14),
-          child: Padding(
-            padding: EdgeInsets.all(_isTablet ? 18 : 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: _isTablet ? 14 : 12,
-                        vertical: _isTablet ? 8 : 6,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [statusColor, statusColor.withOpacity(0.8)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(_isTablet ? 8 : 7),
-                        boxShadow: [
-                          BoxShadow(
-                            color: statusColor.withOpacity(0.3),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        order['orderNumber'] ?? 'N/A',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: _isTablet ? 13 : 12,
-                        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _navigateToOrderDetails(order['_id']),
+            borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Left accent bar
+                  Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        bottomLeft: Radius.circular(12),
                       ),
                     ),
-                    if (isUrgent) ...[
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: _isTablet ? 10 : 8,
-                          vertical: _isTablet ? 6 : 5,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFEE2E2), Color(0xFFFECDD3)],
-                          ),
-                          borderRadius:
-                              BorderRadius.circular(_isTablet ? 8 : 7),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.warning_rounded,
-                              size: 14,
-                              color: Color(0xFFDC2626),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'URGENT',
-                              style: TextStyle(
-                                color: const Color(0xFFDC2626),
-                                fontSize: _isTablet ? 11 : 10,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: _isTablet ? 10 : 8,
-                        vertical: _isTablet ? 5 : 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(_isTablet ? 6 : 5),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.access_time_rounded,
-                            size: 12,
-                            color: Color(0xFF64748B),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatTime(DateTime.parse(order['createdAt'])),
-                            style: TextStyle(
-                              color: const Color(0xFF64748B),
-                              fontSize: _isTablet ? 11 : 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFFE2E8F0),
-                          width: 1,
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.person_rounded,
-                        size: _isTablet ? 20 : 18,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                    SizedBox(width: _isTablet ? 12 : 10),
-                    Expanded(
+                  ),
+                  // Card content
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.all(_isTablet ? 16 : 14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            (order['userId'] is Map
-                                    ? order['userId']['firstName']
-                                    : null) ??
-                                'Customer',
-                            style: TextStyle(
-                              fontSize: _isTablet ? 16 : 15,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF0F172A),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if ((order['userId'] is Map &&
-                                  order['userId']['phone'] != null) ||
-                              order['customerPhone'] != null)
-                            Text(
-                              (order['userId'] is Map
-                                      ? order['userId']['phone']
-                                      : order['customerPhone']) ??
-                                  '',
-                              style: TextStyle(
-                                fontSize: _isTablet ? 13 : 12,
-                                color: const Color(0xFF1E40AF),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: order['deliveryType'] == 'delivery'
-                                  ? const Color(0xFFDCEAFF)
-                                  : const Color(0xFFD1FAE5),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  order['deliveryType'] == 'delivery'
-                                      ? Icons.delivery_dining_rounded
-                                      : Icons.shopping_bag_rounded,
-                                  size: 12,
-                                  color: order['deliveryType'] == 'delivery'
-                                      ? const Color(0xFF1E40AF)
-                                      : const Color(0xFF059669),
+                          // Top row: order number + urgent + time
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
+                                child: Text(
+                                  order['orderNumber'] ?? 'N/A',
+                                  style: GoogleFonts.inter(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: _isTablet ? 13 : 12,
+                                  ),
+                                ),
+                              ),
+                              if (isUrgent) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.warning_rounded, size: 12, color: Color(0xFFDC2626)),
+                                      const SizedBox(width: 4),
+                                      Text('URGENT', style: GoogleFonts.inter(
+                                        color: const Color(0xFFDC2626),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                      )),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              const Spacer(),
+                              Row(
+                                children: [
+                                  const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFF94A3B8)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _formatTime(DateTime.parse(order['createdAt'])),
+                                    style: GoogleFonts.inter(
+                                      color: const Color(0xFF94A3B8),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          // Customer + amount row
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      customerName,
+                                      style: GoogleFonts.inter(
+                                        fontSize: _isTablet ? 15 : 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF0F172A),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (phone != null && phone.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        phone,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: const Color(0xFF1E40AF),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    _formatAmount(order['total'] ?? 0),
+                                    style: GoogleFonts.inter(
+                                      fontSize: _isTablet ? 18 : 17,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF0F172A),
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  // Delivery type badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isDelivery ? const Color(0xFFDCEAFF) : const Color(0xFFD1FAE5),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isDelivery ? Icons.delivery_dining_rounded : Icons.shopping_bag_rounded,
+                                          size: 11,
+                                          color: isDelivery ? const Color(0xFF1E40AF) : const Color(0xFF059669),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          (order['deliveryType'] ?? 'pickup').toUpperCase(),
+                                          style: GoogleFonts.inter(
+                                            fontSize: 9,
+                                            color: isDelivery ? const Color(0xFF1E40AF) : const Color(0xFF059669),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (branchName != null) ...[
+                            const SizedBox(height: 8),
+                            Divider(height: 1, color: const Color(0xFFF1F5F9)),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(Icons.store_rounded, size: 12, color: Color(0xFF94A3B8)),
                                 const SizedBox(width: 5),
                                 Text(
-                                  (order['deliveryType'] ?? 'pickup')
-                                      .toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: _isTablet ? 10 : 9,
-                                    color: order['deliveryType'] == 'delivery'
-                                        ? const Color(0xFF1E40AF)
-                                        : const Color(0xFF059669),
-                                    fontWeight: FontWeight.w700,
+                                  branchName,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: const Color(0xFF94A3B8),
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
-                    SizedBox(width: _isTablet ? 16 : 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _formatAmount(order['total'] ?? 0),
-                          style: TextStyle(
-                            fontSize: _isTablet ? 22 : 20,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF0F172A),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            status.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w800,
-                              color: statusColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                if ((order['branchId'] is Map &&
-                        order['branchId']['name'] != null) ||
-                    order['branchName'] != null) ...[
-                  const SizedBox(height: 10),
-                  const Divider(height: 1),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.store_rounded,
-                        size: 14,
-                        color: Color(0xFF64748B),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Branch: ${order['branchId'] is Map ? order['branchId']['name'] : order['branchName']}',
-                        style: TextStyle(
-                          fontSize: _isTablet ? 12 : 11,
-                          color: const Color(0xFF64748B),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
                   ),
                 ],
-              ],
+              ),
             ),
           ),
         ),

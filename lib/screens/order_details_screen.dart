@@ -1,4 +1,5 @@
 import 'package:Saborly_admin/services/api_service.dart';
+import 'package:Saborly_admin/services/firebase_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:Saborly_admin/services/order_print_service.dart';
@@ -118,6 +119,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       final success =
           await orderProvider.updateOrderStatus(widget.orderId, newStatus);
       if (success) {
+        // Stop ringing when order is accepted or any status is updated
+        if (newStatus == 'confirmed' || newStatus == 'cancelled') {
+          FirebaseMessagingService.stopOrderSound();
+        }
         setState(() {
           _orderData!['status'] = newStatus;
         });
@@ -1145,6 +1150,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         reason: reason,
       );
 
+      FirebaseMessagingService.stopOrderSound();
       setState(() {
         _orderData!['status'] = 'cancelled';
         _orderData!['cancellation'] = {

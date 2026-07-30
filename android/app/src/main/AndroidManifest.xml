@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
 <uses-permission android:name="android.permission.BLUETOOTH" />
 <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
@@ -47,6 +50,10 @@
             <action android:name="FLUTTER_NOTIFICATION_CLICK"/>
             <category android:name="android.intent.category.DEFAULT"/>
         </intent-filter>
+        <intent-filter>
+            <action android:name="NEW_ORDER_NOTIFICATION_CLICK"/>
+            <category android:name="android.intent.category.DEFAULT"/>
+        </intent-filter>
     </activity>
 
     <!-- Custom Firebase Messaging Service -->
@@ -57,6 +64,12 @@
             <action android:name="com.google.firebase.MESSAGING_EVENT" />
         </intent-filter>
     </service>
+
+    <!-- Order ringtone foreground service -->
+    <service
+        android:name="com.saborly.saborly_admin.OrderRingtoneService"
+        android:exported="false"
+        android:foregroundServiceType="mediaPlayback"/>
 
     <meta-data
         android:name="flutterEmbedding"

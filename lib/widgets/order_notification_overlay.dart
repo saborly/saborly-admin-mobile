@@ -43,11 +43,6 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
     );
 
     _controller.forward();
-
-    // Auto dismiss after 8 seconds
-    Future.delayed(const Duration(seconds: 8), () {
-      if (mounted) _dismiss();
-    });
   }
 
   void _dismiss() {

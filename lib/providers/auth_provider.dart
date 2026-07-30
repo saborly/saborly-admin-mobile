@@ -17,6 +17,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     await ApiService.instance.initialize();
+    ApiService.instance.onUnauthorized = _handleUnauthorized;
     _token = ApiService.instance.authToken;
     final branchId = ApiService.instance.branchId;
 
@@ -112,6 +113,16 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  /// Called by ApiService when any request comes back 401 (session expired
+  /// or invalid). Resets local auth state; navigation back to login is
+  /// handled by the widget tree reacting to `isAuthenticated` becoming false.
+  void _handleUnauthorized() {
+    if (_token == null) return;
+    _token = null;
+    _selectedBranch = null;
+    notifyListeners();
   }
 
   Future<void> logout() async {

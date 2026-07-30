@@ -1,5 +1,6 @@
-import 'dart:ui';
-
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -7,6 +8,10 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:Saborly_admin/models/order.dart';
 import 'package:Saborly_admin/services/order_stream_service.dart';
 import 'package:Saborly_admin/firebase_options.dart';
+import 'package:Saborly_admin/main.dart';
+import 'package:Saborly_admin/screens/order_details_screen.dart';
+import 'package:Saborly_admin/services/order_provider.dart';
+import 'package:provider/provider.dart';
 
 // CRITICAL: Top-level function for background message handling
 @pragma('vm:entry-point')
@@ -59,32 +64,25 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await androidPlugin.createNotificationChannel(androidChannel);
   }
 
-  // Show notification - handle both notification field and data-only messages
   final notification = message.notification;
   final data = message.data;
 
-  String title;
-  String body;
-
+  // If the message already has a notification field, the FCM SDK automatically
+  // displayed it — do NOT show another one. Only show for data-only messages.
   if (notification != null) {
-    title = notification.title ??
-        data['title'] ??
-        '🔔 New Order ${data['orderNumber'] ?? ''}';
-    body = notification.body ??
-        data['body'] ??
-        'Order from ${data['customerName'] ?? 'Customer'} - €${data['total'] ?? '0.00'}';
-  } else if (data.isNotEmpty) {
-    // Handle data-only messages
-    title = data['title'] ??
-        data['notificationTitle'] ??
-        '🔔 New Order ${data['orderNumber'] ?? ''}';
-    body = data['body'] ??
-        data['notificationBody'] ??
-        data['message'] ??
-        'Order from ${data['customerName'] ?? 'Customer'} - €${data['total'] ?? '0.00'}';
-  } else {
-    return; // No notification or data to show
+    print('✅ Background: notification shown by FCM SDK, skipping duplicate');
+    return;
   }
+
+  if (data.isEmpty) return;
+
+  final title = data['title'] ??
+      data['notificationTitle'] ??
+      '🔔 New Order ${data['orderNumber'] ?? ''}';
+  final body = data['body'] ??
+      data['notificationBody'] ??
+      data['message'] ??
+      'Order from ${data['customerName'] ?? 'Customer'} - €${data['total'] ?? '0.00'}';
 
   final androidDetails = AndroidNotificationDetails(
     'order_channel',
@@ -94,18 +92,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     priority: Priority.high,
     ticker: 'New Order',
     icon: '@mipmap/ic_launcher',
-    playSound: true,
-    sound: const RawResourceAndroidNotificationSound('order_notification'),
+    playSound: false, // Sound handled by OrderRingtoneService
     enableVibration: true,
     enableLights: true,
     color: const Color(0xFFFF6B35),
     ledColor: const Color(0xFFFF6B35),
     ledOnMs: 1000,
     ledOffMs: 500,
-    styleInformation: BigTextStyleInformation(
-      body,
-      contentTitle: title,
-    ),
+    styleInformation: BigTextStyleInformation(body, contentTitle: title),
   );
 
   const iosDetails = DarwinNotificationDetails(
@@ -116,15 +110,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
 
   await localNotifications.show(
-    DateTime.now().millisecondsSinceEpoch % 1000000,
+    1001,
     title,
     body,
     NotificationDetails(android: androidDetails, iOS: iosDetails),
     payload: data['orderId']?.toString() ?? 'unknown',
   );
 
-  print('✅ Background notification displayed');
-  print('✅ Background message processed');
+  print('✅ Background: data-only notification displayed');
 }
 
 class FirebaseMessagingService {
@@ -132,8 +125,25 @@ class FirebaseMessagingService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   static final AudioPlayer _audioPlayer = AudioPlayer();
+  static Timer? _soundTimer;
 
   static Future<void> initialize() async {
+    // Listen for order ids forwarded from native (e.g. tapping the
+    // system-tray notification built by CustomFirebaseMessagingService).
+    _ringtoneChannel.setMethodCallHandler((call) async {
+      if (call.method == 'openOrder') {
+        _navigateToOrder(call.arguments?.toString());
+      }
+    });
+
+    // Cold start: the order id may have been captured before the engine
+    // was ready — fetch it explicitly.
+    try {
+      final initialOrderId =
+          await _ringtoneChannel.invokeMethod<String>('getInitialOrderId');
+      _navigateToOrder(initialOrderId);
+    } catch (_) {}
+
     // Request permission
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
@@ -260,6 +270,35 @@ class FirebaseMessagingService {
         print('❌ Error adding order from background: $e');
       }
     }
+
+    _navigateToOrder(message.data['orderId']?.toString());
+  }
+
+  static void _navigateToOrder(String? orderId) {
+    if (orderId == null || orderId.isEmpty || orderId == 'unknown') return;
+
+    // The navigator may not be attached yet right when the app launches from
+    // a terminated state, so wait a tick before pushing the route.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = navigatorKey.currentState;
+      if (state == null) return;
+
+      // Notification taps no longer flow through FirebaseMessaging's
+      // onMessageOpenedApp/getInitialMessage (we now send data-only
+      // messages so our own code controls display). That used to be what
+      // pushed the new order into OrderProvider, so the dashboard list
+      // would be stale until a manual refresh. Refresh it here instead.
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        context.read<OrderProvider>().loadOrders();
+      }
+
+      state.push(
+        MaterialPageRoute(
+          builder: (context) => OrderDetailsScreen(orderId: orderId),
+        ),
+      );
+    });
   }
 
   static Future<void> _handleInitialMessage(RemoteMessage? message) async {
@@ -284,7 +323,7 @@ class FirebaseMessagingService {
 
   static void _onNotificationTap(NotificationResponse response) {
     print('📱 Notification tapped: ${response.payload}');
-    // Navigate to order details if needed
+    _navigateToOrder(response.payload);
   }
 
   static Future<void> showOrderNotification(RemoteMessage message) async {
@@ -336,15 +375,38 @@ class FirebaseMessagingService {
     print('✅ Notification displayed');
   }
 
+  static const _ringtoneChannel = MethodChannel('com.saborly.saborly_admin/ringtone');
+
   static Future<void> _playOrderSound() async {
+    _soundTimer?.cancel();
+    _soundTimer = Timer(const Duration(seconds: 20), stopOrderSound);
+
+    // Use native loop mode so the clip repeats continuously without
+    // depending on the onPlayerComplete event firing each time.
     try {
-      await _audioPlayer.stop(); // Stop any playing sound first
-      await _audioPlayer.play(AssetSource('sounds/order_notification.mp3'));
+      await _audioPlayer.stop();
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
       await _audioPlayer.setVolume(1.0);
-      print('✅ Order sound played');
+      await _audioPlayer.play(AssetSource('sounds/order_notification.mp3'));
     } catch (e) {
       print('❌ Error playing sound: $e');
     }
+  }
+
+  static Future<void> stopOrderSound() async {
+    _soundTimer?.cancel();
+    _soundTimer = null;
+
+    // Stop Flutter audio player (foreground)
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.setReleaseMode(ReleaseMode.release);
+    } catch (_) {}
+
+    // Stop Android foreground ringtone service (background/killed app)
+    try {
+      await _ringtoneChannel.invokeMethod('stopRingtone');
+    } catch (_) {}
   }
 
   static Future<String?> getToken() async {

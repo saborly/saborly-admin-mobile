@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,10 @@ import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
 import 'package:Saborly_admin/services/order_provider.dart';
 import 'package:Saborly_admin/providers/auth_provider.dart';
+
+// Global navigator key so services (e.g. notification tap handling) can
+// push routes without a BuildContext from the active widget tree.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -113,12 +118,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => OrderProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         title: 'Saborly Admin',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
           scaffoldBackgroundColor: scaffoldBg,
-          fontFamily: 'Poppins',
           colorScheme: ColorScheme.fromSeed(
             seedColor: primary,
             brightness: Brightness.light,
@@ -126,28 +131,29 @@ class MyApp extends StatelessWidget {
             secondary: secondary,
             surface: surface,
           ),
-          textTheme: ThemeData.light().textTheme.apply(
-                bodyColor: const Color(0xFF111827),
-                displayColor: const Color(0xFF111827),
-              ),
+          textTheme: GoogleFonts.interTextTheme(
+            ThemeData.light().textTheme.apply(
+              bodyColor: const Color(0xFF111827),
+              displayColor: const Color(0xFF111827),
+            ),
+          ),
           cardTheme: CardThemeData(
             elevation: 0,
             color: surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
             ),
           ),
-          appBarTheme: const AppBarTheme(
+          appBarTheme: AppBarTheme(
             elevation: 0,
             centerTitle: false,
             backgroundColor: Colors.white,
-            foregroundColor: Color(0xFF0F172A),
+            foregroundColor: const Color(0xFF0F172A),
             surfaceTintColor: Colors.transparent,
-            titleTextStyle: TextStyle(
+            titleTextStyle: GoogleFonts.inter(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF0F172A),
-              fontFamily: 'Poppins',
+              color: const Color(0xFF0F172A),
             ),
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
@@ -157,9 +163,9 @@ class MyApp extends StatelessWidget {
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
-              textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+              textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 15),
             ),
           ),
           outlinedButtonTheme: OutlinedButtonThemeData(
@@ -168,36 +174,40 @@ class MyApp extends StatelessWidget {
               side: const BorderSide(color: Color(0xFFD1D5DB)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: const Color(0xFFF8FAFC),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            labelStyle: const TextStyle(color: Color(0xFF475569)),
-            hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            labelStyle: GoogleFonts.inter(color: const Color(0xFF475569), fontSize: 14),
+            hintStyle: GoogleFonts.inter(color: const Color(0xFF94A3B8), fontSize: 14),
             prefixIconColor: const Color(0xFF64748B),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: primary, width: 1.4),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: primary, width: 1.5),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFDC2626)),
             ),
           ),
           snackBarTheme: SnackBarThemeData(
             behavior: SnackBarBehavior.floating,
-            backgroundColor: const Color(0xFF1F2937),
-            contentTextStyle: const TextStyle(color: Colors.white),
+            backgroundColor: const Color(0xFF0F172A),
+            contentTextStyle: GoogleFonts.inter(color: Colors.white, fontSize: 14),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
           ),
           dividerTheme: const DividerThemeData(
@@ -211,16 +221,17 @@ class MyApp extends StatelessWidget {
           chipTheme: ChipThemeData(
             selectedColor: primary.withOpacity(0.12),
             backgroundColor: const Color(0xFFF1F5F9),
-            labelStyle: const TextStyle(color: Color(0xFF1E293B), fontSize: 12),
+            labelStyle: GoogleFonts.inter(color: const Color(0xFF1E293B), fontSize: 12),
             side: const BorderSide(color: Color(0xFFE2E8F0)),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
           dialogTheme: DialogThemeData(
             backgroundColor: Colors.white,
+            elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(20),
             ),
           ),
         ),
@@ -246,26 +257,28 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAuthStatus() async {
-    // Show splash for at least 2 seconds
     await Future.delayed(const Duration(seconds: 2));
 
     if (!mounted) return;
-    
-    final authProvider = context.read<AuthProvider>();
-    await authProvider.initialize();
 
-    if (mounted) {
-      if (authProvider.isAuthenticated && authProvider.selectedBranch != null) {
-        // User is logged in and branch is selected
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const OrdersDashboardScreen()),
-        );
-      } else {
-        // User is not logged in or branch not selected
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-        );
-      }
+    final authProvider = context.read<AuthProvider>();
+
+    try {
+      await authProvider.initialize().timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('Auth init error/timeout: $e');
+    }
+
+    if (!mounted) return;
+
+    if (authProvider.isAuthenticated && authProvider.selectedBranch != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const OrdersDashboardScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+      );
     }
   }
 

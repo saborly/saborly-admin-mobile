@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
@@ -16,9 +17,15 @@ class ApiService {
     ),
   );
 
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   String? _authToken;
   String? _branchId;
+
+  /// Called whenever a request comes back 401 (token missing/expired/invalid).
+  /// The app wires this up to clear session state and route to login.
+  void Function()? onUnauthorized;
 
   // lib/services/api_service.dart
 
@@ -43,6 +50,12 @@ class ApiService {
       onError: (DioException e, handler) {
         print('❌ API Error: ${e.response?.statusCode} - ${e.message}');
         print('❌ Response Data: ${e.response?.data}');
+        if (e.response?.statusCode == 401 &&
+            !e.requestOptions.path.contains('/auth/logout')) {
+          setAuthToken(null);
+          setBranchId(null);
+          onUnauthorized?.call();
+        }
         return handler.next(e);
       },
     ));
@@ -138,10 +151,31 @@ class ApiService {
   Future<void> logout() async {
     try {
       await _dio.post('/auth/logout');
+    } on DioException catch (e) {
+      // 401/403 just means the session was already invalid server-side;
+      // that's still a successful logout from the client's perspective.
+      if (e.response?.statusCode != 401 && e.response?.statusCode != 403) {
+        rethrow;
+      }
     } finally {
       setAuthToken(null);
       setBranchId(null);
+      await _safeDeleteAll();
+    }
+  }
+
+  Future<void> _safeDeleteAll() async {
+    try {
       await _storage.deleteAll();
+    } catch (_) {
+      // Old data was encrypted with Android Keystore (before encryptedSharedPreferences migration).
+      // Fall back to deleting with the legacy options so logout always succeeds.
+      try {
+        const legacyStorage = FlutterSecureStorage();
+        await legacyStorage.deleteAll();
+      } catch (e) {
+        debugPrint('Logout storage clear failed: $e');
+      }
     }
   }
 
