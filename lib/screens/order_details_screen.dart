@@ -840,11 +840,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     if (foodItemName is String) {
       itemName = foodItemName;
     } else if (foodItemName is Map) {
-      // Get name in preferred order: English > Spanish > Catalan > Arabic
+      // Get name in preferred order: English > Spanish > Catalan > Arabic > French
       itemName = foodItemName['en'] ??
           foodItemName['es'] ??
           foodItemName['ca'] ??
           foodItemName['ar'] ??
+          foodItemName['fr'] ??
           (foodItemName.values.isNotEmpty
               ? foodItemName.values.first.toString()
               : 'Unknown Item');
