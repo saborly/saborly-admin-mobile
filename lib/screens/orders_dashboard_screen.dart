@@ -10,6 +10,7 @@ import 'package:Saborly_admin/services/order_stream_service.dart';
 import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/widgets/order_notification_overlay.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
+import 'package:Saborly_admin/screens/live_deliveries_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 
@@ -405,6 +406,15 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
         ),
       ),
       actions: [
+        _buildActionButton(
+          icon: Icons.map_rounded,
+          color: _brandPrimary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LiveDeliveriesScreen()),
+          ),
+          tooltip: 'Live Deliveries',
+        ),
         _buildActionButton(
           icon: Icons.store_rounded,
           color: _brandSecondary,

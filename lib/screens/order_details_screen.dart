@@ -154,6 +154,82 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     return _orderData?['deliveryType']?.toLowerCase() == 'delivery';
   }
 
+  bool _assigningDriver = false;
+
+  Future<void> _showAssignDriverDialog() async {
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    await orderProvider.loadAvailableDrivers();
+    if (!mounted) return;
+
+    final drivers = orderProvider.availableDrivers;
+
+    await showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        if (drivers.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('No drivers available in this branch right now.'),
+          );
+        }
+        return SafeArea(
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            itemCount: drivers.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final driver = drivers[index];
+              final isOnline = (driver['driverStatus'] as Map<String, dynamic>?)?['isOnline'] == true;
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _brandPrimary.withOpacity(0.1),
+                  child: Icon(Icons.two_wheeler_rounded, color: _brandPrimary),
+                ),
+                title: Text('${driver['firstName'] ?? ''} ${driver['lastName'] ?? ''}'.trim()),
+                subtitle: Text(driver['phone'] ?? ''),
+                trailing: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isOnline ? Colors.green : Colors.grey.shade400,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _assignDriver(driver);
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _assignDriver(Map<String, dynamic> driver) async {
+    if (_orderData == null) return;
+    setState(() => _assigningDriver = true);
+
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    final success = await orderProvider.assignDriver(widget.orderId, driver['_id'].toString());
+
+    if (!mounted) return;
+    setState(() {
+      _assigningDriver = false;
+      if (success) _orderData!['deliveryAgent'] = driver;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? 'Driver assigned' : 'Failed to assign driver'),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -286,6 +362,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ),
           ],
         ),
+        _buildDriverAssignmentSection(context),
         _buildActionButtons(context),
       ],
     );
@@ -298,6 +375,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         _buildCustomerInfo(context),
         _buildItemsList(context),
         _buildPricingDetails(context),
+        _buildDriverAssignmentSection(context),
         _buildActionButtons(context),
       ],
     );
@@ -938,6 +1016,62 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDriverAssignmentSection(BuildContext context) {
+    final status = _orderData!['status'];
+    if (!_isDeliveryOrder || ['cancelled', 'delivered', 'refunded'].contains(status)) {
+      return const SizedBox.shrink();
+    }
+
+    final driver = _orderData!['deliveryAgent'] as Map<String, dynamic>?;
+    final isTablet = _isTablet(context);
+
+    return Container(
+      margin: EdgeInsets.fromLTRB(isTablet ? 24 : 16, 0, isTablet ? 24 : 16, isTablet ? 16 : 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: _brandPrimary.withOpacity(0.1),
+            child: Icon(Icons.two_wheeler_rounded, color: _brandPrimary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  driver != null ? 'Delivery Driver' : 'No driver assigned',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF0F172A)),
+                ),
+                if (driver != null)
+                  Text(
+                    '${driver['firstName'] ?? ''} ${driver['lastName'] ?? ''}'.trim(),
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  )
+                else
+                  const Text(
+                    'Assign a driver to enable live GPS tracking',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _assigningDriver ? null : _showAssignDriverDialog,
+            child: _assigningDriver
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(driver != null ? 'Change' : 'Assign'),
+          ),
         ],
       ),
     );

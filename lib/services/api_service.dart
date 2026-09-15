@@ -277,6 +277,41 @@ class ApiService {
     }
   }
 
+  // ==================== DRIVERS / LIVE TRACKING ====================
+
+  Future<List<dynamic>> getAvailableDrivers() async {
+    try {
+      final response = await _dio.get('/drivers/available');
+      return (response.data['drivers'] as List?) ?? [];
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<dynamic>> getActiveDeliveries() async {
+    try {
+      final response = await _dio.get('/drivers/active-deliveries');
+      return (response.data['orders'] as List?) ?? [];
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> assignDriver({
+    required String orderId,
+    required String driverId,
+  }) async {
+    try {
+      final response = await _dio.patch(
+        '/orders/$orderId/assign-driver',
+        data: {'driverId': driverId},
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> getOrderStats({
     DateTime? startDate,
     DateTime? endDate,

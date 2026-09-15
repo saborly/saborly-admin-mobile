@@ -69,6 +69,60 @@ print('Orders by Status: ${jsonEncode(ordersByStatus)}');
     }
   }
 
+  // ==================== LIVE DELIVERIES / DRIVERS ====================
+
+  List<Map<String, dynamic>> _activeDeliveries = [];
+  List<Map<String, dynamic>> _availableDrivers = [];
+  bool _deliveriesLoading = false;
+
+  List<Map<String, dynamic>> get activeDeliveries => _activeDeliveries;
+  List<Map<String, dynamic>> get availableDrivers => _availableDrivers;
+  bool get deliveriesLoading => _deliveriesLoading;
+
+  Future<void> loadActiveDeliveries() async {
+    _deliveriesLoading = true;
+    notifyListeners();
+    try {
+      final data = await ApiService.instance.getActiveDeliveries();
+      _activeDeliveries = List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      debugPrint('Error loading active deliveries: $e');
+    } finally {
+      _deliveriesLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Replaces the active-deliveries list from a `branch:active_deliveries_update`
+  /// socket payload — called by LiveDeliveriesScreen, keeps this provider as
+  /// the single source of truth regardless of REST vs. socket origin.
+  void applyActiveDeliveriesUpdate(List<dynamic> orders) {
+    _activeDeliveries = List<Map<String, dynamic>>.from(orders);
+    notifyListeners();
+  }
+
+  Future<void> loadAvailableDrivers() async {
+    try {
+      final data = await ApiService.instance.getAvailableDrivers();
+      _availableDrivers = List<Map<String, dynamic>>.from(data);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading available drivers: $e');
+    }
+  }
+
+  Future<bool> assignDriver(String orderId, String driverId) async {
+    try {
+      await ApiService.instance.assignDriver(orderId: orderId, driverId: driverId);
+      return true;
+    } catch (e) {
+      debugPrint('Error assigning driver: $e');
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>?> loadOrderDetails(String orderId) async {
     try {
       return await ApiService.instance.getOrderDetails(orderId);
