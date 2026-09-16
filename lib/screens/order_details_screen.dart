@@ -1,6 +1,7 @@
 import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:Saborly_admin/services/order_print_service.dart';
@@ -836,7 +837,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ),
               const SizedBox(height: 10),
               _ContactOptionTile(
-                icon: Icons.chat_rounded,
+                icon: FontAwesomeIcons.whatsapp,
                 iconColor: const Color(0xFF25D366),
                 label: 'WhatsApp',
                 subtitle: 'Open a chat',
