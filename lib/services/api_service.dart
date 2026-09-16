@@ -312,6 +312,32 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> createDriver({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+    String? vehicleType,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/drivers',
+        data: {
+          'firstName': firstName,
+          'lastName': lastName,
+          'email': email,
+          'phone': phone,
+          'password': password,
+          if (vehicleType != null) 'vehicleType': vehicleType,
+        },
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> getOrderStats({
     DateTime? startDate,
     DateTime? endDate,

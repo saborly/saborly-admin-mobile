@@ -111,6 +111,32 @@ print('Orders by Status: ${jsonEncode(ordersByStatus)}');
     }
   }
 
+  /// Returns null on success, or an error message to show the admin.
+  Future<String?> createDriver({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+    String? vehicleType,
+  }) async {
+    try {
+      await ApiService.instance.createDriver(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+        password: password,
+        vehicleType: vehicleType,
+      );
+      await loadAvailableDrivers();
+      return null;
+    } catch (e) {
+      debugPrint('Error creating driver: $e');
+      return e.toString();
+    }
+  }
+
   Future<bool> assignDriver(String orderId, String driverId) async {
     try {
       await ApiService.instance.assignDriver(orderId: orderId, driverId: driverId);

@@ -1,16 +1,14 @@
 // screens/orders_dashboard_screen.dart
 import 'package:Saborly_admin/providers/auth_provider.dart';
-import 'package:Saborly_admin/screens/auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:Saborly_admin/models/order.dart';
 import 'package:Saborly_admin/screens/order_details_screen.dart';
 import 'package:Saborly_admin/services/order_provider.dart';
 import 'package:Saborly_admin/services/order_stream_service.dart';
-import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/widgets/order_notification_overlay.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
-import 'package:Saborly_admin/screens/live_deliveries_screen.dart';
+import 'package:Saborly_admin/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 
@@ -23,9 +21,6 @@ class OrdersDashboardScreen extends StatefulWidget {
 
 class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     with SingleTickerProviderStateMixin {
-  static const Color _brandPrimary = Color(0xFF4A148C);
-  static const Color _brandSecondary = Color(0xFF7C3AED);
-
   OverlayEntry? _overlayEntry;
   StreamSubscription? _orderSubscription;
   late TabController _tabController;
@@ -44,17 +39,6 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     _tabController = TabController(length: _tabs.length, vsync: this);
     _listenToNewOrders();
     _loadOrders();
-    context.read<AuthProvider>().addListener(_onAuthChanged);
-  }
-
-  void _onAuthChanged() {
-    final auth = context.read<AuthProvider>();
-    if (!auth.isAuthenticated && mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-        (route) => false,
-      );
-    }
   }
 
   void _loadOrders() {
@@ -125,173 +109,8 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     );
   }
 
-  Future<void> _handleLogout() async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: Colors.white,
-        contentPadding: EdgeInsets.all(_isTablet ? 28 : 24),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEE2E2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.logout_rounded,
-                color: Color(0xFFDC2626),
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              'Logout',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: _isTablet ? 22 : 20,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to logout from your account?',
-          style: TextStyle(
-            fontSize: _isTablet ? 16 : 15,
-            color: const Color(0xFF64748B),
-            height: 1.5,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(
-                horizontal: _isTablet ? 24 : 20,
-                vertical: _isTablet ? 14 : 12,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                fontSize: _isTablet ? 15 : 14,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              _performLogout();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(
-                horizontal: _isTablet ? 24 : 20,
-                vertical: _isTablet ? 14 : 12,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Logout',
-              style: TextStyle(
-                fontSize: _isTablet ? 15 : 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _performLogout() async {
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(Color(0xFF1E40AF)),
-                  strokeWidth: 3,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Logging out...',
-                  style: TextStyle(
-                    fontSize: _isTablet ? 16 : 15,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      await ApiService.instance.logout();
-
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => AdminLoginScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      debugPrint('Logout error: $e');
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text('Logout failed: $e')),
-              ],
-            ),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
-    context.read<AuthProvider>().removeListener(_onAuthChanged);
     _removeOverlay();
     _orderSubscription?.cancel();
     _tabController.dispose();
@@ -342,14 +161,14 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [_brandPrimary, _brandSecondary],
+                    colors: [AppColors.primary, AppColors.secondary],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: _brandPrimary.withOpacity(0.3),
+                      color: AppColors.primary.withOpacity(0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -407,43 +226,9 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
       ),
       actions: [
         _buildActionButton(
-          icon: Icons.map_rounded,
-          color: _brandPrimary,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const LiveDeliveriesScreen()),
-          ),
-          tooltip: 'Live Deliveries',
-        ),
-        _buildActionButton(
-          icon: Icons.store_rounded,
-          color: _brandSecondary,
-          onTap: () => _showBranchSwitchDialog(context),
-          tooltip: 'Switch Branch',
-        ),
-        Consumer<OrderProvider>(
-          builder: (context, provider, _) => _buildActionButton(
-            icon:
-                provider.autoPrintEnabled ? Icons.print : Icons.print_disabled,
-            color: provider.autoPrintEnabled
-                ? _brandPrimary
-                : const Color(0xFF94A3B8),
-            onTap: _showSettingsDialog,
-            tooltip: 'Settings',
-          ),
-        ),
-        _buildActionButton(
           icon: Icons.refresh_rounded,
-          color: const Color(0xFF64748B),
           onTap: _loadOrders,
           tooltip: 'Refresh',
-        ),
-        _buildActionButton(
-          icon: Icons.logout_rounded,
-          color: const Color(0xFFDC2626),
-          onTap: _handleLogout,
-          tooltip: 'Logout',
-          isLast: true,
         ),
       ],
     );
@@ -451,15 +236,12 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
 
   Widget _buildActionButton({
     required IconData icon,
-    required Color color,
     required VoidCallback onTap,
     required String tooltip,
-    bool isLast = false,
+    Color color = AppColors.textMedium,
   }) {
     return Container(
-      margin: EdgeInsets.only(
-        right: isLast ? (_isTablet ? 20 : 16) : (_isTablet ? 8 : 6),
-      ),
+      margin: EdgeInsets.only(right: _isTablet ? 20 : 16),
       child: Tooltip(
         message: tooltip,
         child: Material(
@@ -467,20 +249,13 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(12),
-            child: Container(
+            customBorder: const CircleBorder(),
+            child: Padding(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: color.withOpacity(0.15),
-                  width: 1,
-                ),
-              ),
               child: Icon(
                 icon,
                 color: color,
-                size: _isTablet ? 20 : 18,
+                size: _isTablet ? 22 : 20,
               ),
             ),
           ),
@@ -506,16 +281,16 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
               ),
             ),
             padding: EdgeInsets.fromLTRB(
-              _isTablet ? 32 : 16,
-              _isTablet ? 20 : 16,
-              _isTablet ? 32 : 16,
+              _isTablet ? 32 : 18,
               _isTablet ? 24 : 20,
+              _isTablet ? 32 : 18,
+              _isTablet ? 28 : 22,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 2, bottom: 12),
+                  padding: const EdgeInsets.only(left: 2, bottom: 14),
                   child: Text(
                     "Today's Overview",
                     style: GoogleFonts.inter(
@@ -532,39 +307,35 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                       child: _buildStatCard(
                         stats['totalOrders'].toString(),
                         'Total',
-                        const Color(0xFF4A148C),
+                        AppColors.primary,
                         Icons.receipt_long_rounded,
-                        const Color(0xFFF3E5FF),
                       ),
                     ),
-                    SizedBox(width: _isTablet ? 12 : 10),
+                    SizedBox(width: _isTablet ? 14 : 12),
                     Expanded(
                       child: _buildStatCard(
                         stats['pendingOrders'].toString(),
                         'Pending',
-                        const Color(0xFFEA580C),
+                        AppColors.warning,
                         Icons.pending_actions_rounded,
-                        const Color(0xFFFFF0E6),
                       ),
                     ),
-                    SizedBox(width: _isTablet ? 12 : 10),
+                    SizedBox(width: _isTablet ? 14 : 12),
                     Expanded(
                       child: _buildStatCard(
                         stats['completedOrders'].toString(),
                         'Done',
-                        const Color(0xFF059669),
+                        AppColors.success,
                         Icons.check_circle_rounded,
-                        const Color(0xFFE6FAF3),
                       ),
                     ),
-                    SizedBox(width: _isTablet ? 12 : 10),
+                    SizedBox(width: _isTablet ? 14 : 12),
                     Expanded(
                       child: _buildStatCard(
                         '€${(stats['revenue'] as double).toStringAsFixed(0)}',
                         'Revenue',
-                        const Color(0xFF0891B2),
+                        AppColors.secondary,
                         Icons.payments_rounded,
-                        const Color(0xFFE0F6FB),
                       ),
                     ),
                   ],
@@ -582,48 +353,47 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     String label,
     Color color,
     IconData icon,
-    Color bgColor,
   ) {
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: _isTablet ? 14 : 10,
-        vertical: _isTablet ? 16 : 12,
+        horizontal: _isTablet ? 16 : 12,
+        vertical: _isTablet ? 18 : 15,
       ),
       decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(_isTablet ? 18 : 16),
+        boxShadow: AppColors.softShadow(opacity: 0.05, blur: 14, offset: const Offset(0, 3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(7),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon, color: color, size: _isTablet ? 18 : 16),
           ),
-          SizedBox(height: _isTablet ? 10 : 8),
+          SizedBox(height: _isTablet ? 12 : 10),
           Text(
             value,
             style: GoogleFonts.inter(
-              color: const Color(0xFF0F172A),
-              fontSize: _isTablet ? 22 : 18,
+              color: AppColors.textDark,
+              fontSize: _isTablet ? 22 : 19,
               fontWeight: FontWeight.w800,
               height: 1,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 4),
           Text(
             label,
             style: GoogleFonts.inter(
-              color: const Color(0xFF64748B),
-              fontSize: _isTablet ? 12 : 11,
+              color: AppColors.textMedium,
+              fontSize: _isTablet ? 12 : 11.5,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -668,7 +438,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
             ),
             indicatorSize: TabBarIndicatorSize.tab,
             dividerColor: Colors.transparent,
-            labelColor: _brandPrimary,
+            labelColor: AppColors.primary,
             unselectedLabelColor: const Color(0xFF64748B),
             labelStyle: GoogleFonts.inter(
               fontWeight: FontWeight.w700,
@@ -698,7 +468,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(tab.toLowerCase())
+                              color: AppColors.statusColor(tab.toLowerCase())
                                   .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(5),
                             ),
@@ -707,7 +477,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: _getStatusColor(tab.toLowerCase()),
+                                color: AppColors.statusColor(tab.toLowerCase()),
                               ),
                             ),
                           ),
@@ -738,15 +508,15 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF1E40AF).withOpacity(0.1),
-                        const Color(0xFF3B82F6).withOpacity(0.1),
+                        AppColors.primary.withOpacity(0.1),
+                        AppColors.primaryDark.withOpacity(0.1),
                       ],
                     ),
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation(Color(0xFF1E40AF)),
+                      valueColor: AlwaysStoppedAnimation(AppColors.primary),
                       strokeWidth: 3,
                     ),
                   ),
@@ -803,7 +573,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                   icon: const Icon(Icons.refresh_rounded, size: 20),
                   label: const Text('Try Again'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E40AF),
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(
                       horizontal: _isTablet ? 32 : 28,
@@ -871,7 +641,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
 
         return RefreshIndicator(
           onRefresh: () => provider.loadOrders(),
-          color: const Color(0xFF1E40AF),
+          color: AppColors.primary,
           child:
               _isLargeTablet ? _buildGridView(orders) : _buildListView(orders),
         );
@@ -881,9 +651,9 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
 
   Widget _buildListView(List<Map<String, dynamic>> orders) {
     return ListView.separated(
-      padding: EdgeInsets.all(_isTablet ? 24 : 20),
+      padding: EdgeInsets.all(_isTablet ? 24 : 18),
       itemCount: orders.length,
-      separatorBuilder: (_, __) => SizedBox(height: _isTablet ? 14 : 12),
+      separatorBuilder: (_, __) => SizedBox(height: _isTablet ? 16 : 14),
       itemBuilder: (context, index) => _buildOrderCard(orders[index]),
     );
   }
@@ -905,7 +675,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final status = order['status'] as String;
     final isUrgent = _isOrderUrgent(order);
-    final statusColor = _getStatusColor(status);
+    final statusColor = AppColors.statusColor(status);
 
     final accentColor = isUrgent ? const Color(0xFFDC2626) : statusColor;
     final phone = (order['userId'] is Map ? order['userId']['phone'] : order['customerPhone']) as String?;
@@ -913,89 +683,82 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
     final branchName = order['branchId'] is Map ? order['branchId']['name'] : order['branchName'];
     final isDelivery = order['deliveryType'] == 'delivery';
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
-          border: Border.all(color: const Color(0xFFE8ECF0)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+    final radius = _isTablet ? 20.0 : 18.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: AppColors.softShadow(opacity: 0.05, blur: 16, offset: const Offset(0, 4)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
         child: Material(
-          color: Colors.transparent,
+          color: Colors.white,
           child: InkWell(
             onTap: () => _navigateToOrderDetails(order['_id']),
-            borderRadius: BorderRadius.circular(_isTablet ? 14 : 12),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Left accent bar
-                  Container(
-                    width: 4,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        bottomLeft: Radius.circular(12),
-                      ),
-                    ),
-                  ),
-                  // Card content
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.all(_isTablet ? 16 : 14),
+            borderRadius: BorderRadius.circular(radius),
+            child: Padding(
+                      padding: EdgeInsets.all(_isTablet ? 20 : 18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Top row: order number + urgent + time
+                          // Top row: order number + status + urgent + time
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  order['orderNumber'] ?? 'N/A',
-                                  style: GoogleFonts.inter(
-                                    color: statusColor,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: _isTablet ? 13 : 12,
-                                  ),
+                              Expanded(
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    Text(
+                                      '#${order['orderNumber'] ?? 'N/A'}',
+                                      style: GoogleFonts.inter(
+                                        color: AppColors.textDark,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: _isTablet ? 13 : 12,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: statusColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        AppColors.statusLabel(status),
+                                        style: GoogleFonts.inter(
+                                          color: statusColor,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 10.5,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isUrgent)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFEE2E2),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.warning_rounded, size: 12, color: Color(0xFFDC2626)),
+                                            const SizedBox(width: 4),
+                                            Text('URGENT', style: GoogleFonts.inter(
+                                              color: const Color(0xFFDC2626),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                            )),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                              if (isUrgent) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFEE2E2),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.warning_rounded, size: 12, color: Color(0xFFDC2626)),
-                                      const SizedBox(width: 4),
-                                      Text('URGENT', style: GoogleFonts.inter(
-                                        color: const Color(0xFFDC2626),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                      )),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              const Spacer(),
+                              const SizedBox(width: 8),
                               Row(
                                 children: [
                                   const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFF94A3B8)),
@@ -1012,11 +775,26 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 14),
                           // Customer + amount row
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
+                              Container(
+                                width: _isTablet ? 48 : 44,
+                                height: _isTablet ? 48 : 44,
+                                decoration: BoxDecoration(
+                                  color: accentColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(_isTablet ? 14 : 13),
+                                ),
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  isDelivery ? Icons.delivery_dining_rounded : Icons.shopping_bag_rounded,
+                                  color: accentColor,
+                                  size: _isTablet ? 24 : 22,
+                                ),
+                              ),
+                              SizedBox(width: _isTablet ? 14 : 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1037,7 +815,7 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                                         phone,
                                         style: GoogleFonts.inter(
                                           fontSize: 12,
-                                          color: const Color(0xFF1E40AF),
+                                          color: AppColors.primary,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -1058,32 +836,14 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                                       letterSpacing: -0.3,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  // Delivery type badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: isDelivery ? const Color(0xFFDCEAFF) : const Color(0xFFD1FAE5),
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          isDelivery ? Icons.delivery_dining_rounded : Icons.shopping_bag_rounded,
-                                          size: 11,
-                                          color: isDelivery ? const Color(0xFF1E40AF) : const Color(0xFF059669),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          (order['deliveryType'] ?? 'pickup').toUpperCase(),
-                                          style: GoogleFonts.inter(
-                                            fontSize: 9,
-                                            color: isDelivery ? const Color(0xFF1E40AF) : const Color(0xFF059669),
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    (order['deliveryType'] ?? 'pickup').toString().toUpperCase(),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      color: accentColor,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.3,
                                     ),
                                   ),
                                 ],
@@ -1091,17 +851,17 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                             ],
                           ),
                           if (branchName != null) ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             Divider(height: 1, color: const Color(0xFFF1F5F9)),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 10),
                             Row(
                               children: [
-                                const Icon(Icons.store_rounded, size: 12, color: Color(0xFF94A3B8)),
-                                const SizedBox(width: 5),
+                                const Icon(Icons.store_rounded, size: 13, color: Color(0xFF94A3B8)),
+                                const SizedBox(width: 6),
                                 Text(
                                   branchName,
                                   style: GoogleFonts.inter(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     color: const Color(0xFF94A3B8),
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -1111,237 +871,11 @@ class _OrdersDashboardScreenState extends State<OrdersDashboardScreen>
                           ],
                         ],
                       ),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ),
       ),
     );
-  }
-
-  void _showBranchSwitchDialog(BuildContext context) {
-    final authProvider = context.read<AuthProvider>();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Switch Branch'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: authProvider.branches.map((branch) {
-            final isSelected = branch.id == authProvider.selectedBranch?.id;
-            return ListTile(
-              leading: Icon(
-                Icons.store_rounded,
-                color: isSelected ? const Color(0xFF1E40AF) : Colors.grey,
-              ),
-              title: Text(
-                branch.name,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? const Color(0xFF1E40AF) : Colors.black87,
-                ),
-              ),
-              trailing: isSelected
-                  ? const Icon(Icons.check_circle, color: Color(0xFF1E40AF))
-                  : null,
-              onTap: () {
-                Navigator.pop(context);
-                if (!isSelected) {
-                  authProvider.setSelectedBranch(branch);
-                  _loadOrders(); // Re-fetch all data for new branch
-                }
-              },
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  void _showSettingsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: Colors.white,
-        contentPadding: EdgeInsets.all(_isTablet ? 28 : 24),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E40AF), Color(0xFF3B82F6)],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.settings_rounded,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              'Settings',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: _isTablet ? 22 : 20,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-          ],
-        ),
-        content: Consumer<OrderProvider>(
-          builder: (context, provider, _) => Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: const Color(0xFFE2E8F0),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildSettingTile(
-                  icon: Icons.print,
-                  title: 'Auto-Print Orders',
-                  subtitle: 'Automatically print new orders',
-                  value: provider.autoPrintEnabled,
-                  onChanged: (value) => provider.toggleAutoPrint(value),
-                ),
-                Container(
-                  height: 1,
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        const Color(0xFFE2E8F0),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-                _buildSettingTile(
-                  icon: Icons.check_circle,
-                  title: 'Auto-Accept Orders',
-                  subtitle: 'Automatically confirm new orders',
-                  value: provider.autoAcceptEnabled,
-                  onChanged: (value) => provider.toggleAutoAccept(value),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E40AF),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(
-                horizontal: _isTablet ? 32 : 28,
-                vertical: _isTablet ? 16 : 14,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Done',
-              style: TextStyle(
-                fontSize: _isTablet ? 15 : 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: _isTablet ? 20 : 16,
-        vertical: _isTablet ? 12 : 10,
-      ),
-      secondary: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: value ? const Color(0xFFDCEAFF) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(
-          icon,
-          color: value ? const Color(0xFF1E40AF) : const Color(0xFF94A3B8),
-          size: 20,
-        ),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: _isTablet ? 16 : 15,
-          color: const Color(0xFF0F172A),
-        ),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(
-          subtitle,
-          style: TextStyle(
-            fontSize: _isTablet ? 13 : 12,
-            color: const Color(0xFF64748B),
-          ),
-        ),
-      ),
-      value: value,
-      onChanged: onChanged,
-      activeColor: const Color(0xFF1E40AF),
-      activeTrackColor: const Color(0xFF1E40AF).withOpacity(0.3),
-      inactiveThumbColor: const Color(0xFFCBD5E1),
-      inactiveTrackColor: const Color(0xFFE2E8F0),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'all':
-        return const Color(0xFF1E40AF);
-      case 'pending':
-        return const Color(0xFFEA580C);
-      case 'confirmed':
-        return const Color(0xFF2563EB);
-      case 'preparing':
-        return const Color(0xFF7C3AED);
-      case 'ready':
-        return const Color(0xFF059669);
-      case 'delivered':
-        return const Color(0xFF0891B2);
-      case 'completed':
-        return const Color(0xFF047857);
-      case 'cancelled':
-        return const Color(0xFFDC2626);
-      default:
-        return const Color(0xFF64748B);
-    }
   }
 
   bool _isOrderUrgent(Map<String, dynamic> order) {

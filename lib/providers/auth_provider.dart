@@ -9,11 +9,32 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  String? _adminName;
+  String? _adminEmail;
+  String? _adminRole;
+
   String? get token => _token;
   Branch? get selectedBranch => _selectedBranch;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _token != null;
+
+  String? get adminName => _adminName;
+  String? get adminEmail => _adminEmail;
+  String? get adminRole => _adminRole;
+
+  /// Initials for the account avatar, e.g. "Jane Doe" -> "JD". Falls back to
+  /// the email's first letter, then a generic icon-less placeholder.
+  String get adminInitials {
+    final name = _adminName?.trim();
+    if (name != null && name.isNotEmpty) {
+      final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+      if (parts.length >= 2) return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+      return parts.first[0].toUpperCase();
+    }
+    if (_adminEmail != null && _adminEmail!.isNotEmpty) return _adminEmail![0].toUpperCase();
+    return 'A';
+  }
 
   Future<void> initialize() async {
     await ApiService.instance.initialize();
@@ -32,7 +53,30 @@ class AuthProvider with ChangeNotifier {
         );
       }
     }
+    if (_token != null) {
+      await loadProfile();
+    }
     notifyListeners();
+  }
+
+  /// Fetches the signed-in admin's name/email/role for display on the
+  /// Account tab. Best-effort — a failure here shouldn't block the rest of
+  /// the app, so it's swallowed rather than surfaced as `_error`.
+  Future<void> loadProfile() async {
+    try {
+      final data = await ApiService.instance.getProfile();
+      final user = data['user'] as Map<String, dynamic>?;
+      if (user != null) {
+        final first = (user['firstName'] ?? '').toString().trim();
+        final last = (user['lastName'] ?? '').toString().trim();
+        _adminName = [first, last].where((s) => s.isNotEmpty).join(' ');
+        _adminEmail = user['email'] as String?;
+        _adminRole = user['role'] as String?;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+    }
   }
 
   List<Branch> _branches = [];

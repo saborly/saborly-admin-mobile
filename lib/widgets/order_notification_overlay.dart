@@ -1,6 +1,7 @@
 // widgets/order_notification_overlay.dart
 import 'package:flutter/material.dart';
 import 'package:Saborly_admin/models/order.dart';
+import 'package:Saborly_admin/theme/app_colors.dart';
 
 class OrderNotificationOverlay extends StatefulWidget {
   final OrderNotification order;
@@ -90,7 +91,7 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
                   borderRadius: BorderRadius.circular(20),
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFFFF6B35).withOpacity(0.05),
+                      AppColors.accent.withOpacity(0.05),
                       Colors.white,
                     ],
                     begin: Alignment.topLeft,
@@ -106,12 +107,12 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
+                              colors: [AppColors.accent, Color(0xFFFF8C42)],
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFFF6B35).withOpacity(0.3),
+                                color: AppColors.accent.withOpacity(0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 4),
                               ),
@@ -213,7 +214,7 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
                                 const Icon(
                                   Icons.store_rounded,
                                   size: 16,
-                                  color: Color(0xFFFF6B35),
+                                  color: AppColors.accent,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -236,7 +237,7 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
                       child: ElevatedButton(
                         onPressed: widget.onViewOrder,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF6B35),
+                          backgroundColor: AppColors.accent,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -274,7 +275,7 @@ class _OrderNotificationOverlayState extends State<OrderNotificationOverlay>
   Widget _buildInfoColumn(IconData icon, String label, String value) {
     return Column(
       children: [
-        Icon(icon, color: const Color(0xFFFF6B35), size: 20),
+        Icon(icon, color: AppColors.accent, size: 20),
         const SizedBox(height: 6),
         Text(
           label,

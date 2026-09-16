@@ -2,8 +2,10 @@ import 'package:Saborly_admin/services/api_service.dart';
 import 'package:Saborly_admin/services/firebase_messaging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:Saborly_admin/services/order_print_service.dart';
 import 'package:Saborly_admin/services/order_provider.dart';
+import 'package:Saborly_admin/theme/app_colors.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final String orderId;
@@ -15,15 +17,25 @@ class OrderDetailsScreen extends StatefulWidget {
 }
 
 class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
-  static const Color _brandPrimary = Color(0xFF4A148C);
-  static const Color _brandSecondary = Color(0xFF7C3AED);
-  static const Color _accent = Color(0xFFFF6B35);
-  static const Color _surfaceAlt = Color(0xFFF8FAFC);
-
   Map<String, dynamic>? _orderData;
 
   bool _isLoading = true;
   String? _error;
+  /// Turns a raw backend value like `cashOnDelivery` or `out-for-delivery`
+  /// into a readable label ("Cash On Delivery") instead of showing it
+  /// verbatim in ALL CAPS, which reads as broken rather than intentional.
+  String _prettyLabel(String raw) {
+    final spaced = raw
+        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+        .replaceAll('-', ' ')
+        .replaceAll('_', ' ');
+    return spaced
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(' ');
+  }
+
   String _formatAmount(dynamic amount) {
     final parsed = amount is num
         ? amount.toDouble()
@@ -62,11 +74,13 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     return _isTablet(context) ? baseFontSize * 1.2 : baseFontSize;
   }
 
-  Future<void> _loadOrderDetails() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _loadOrderDetails({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final orderProvider = Provider.of<OrderProvider>(context, listen: false);
@@ -76,17 +90,19 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           _orderData = orderData;
           _isLoading = false;
         });
-      } else {
+      } else if (!silent) {
         setState(() {
           _error = 'Failed to load order details';
           _isLoading = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _error = 'Error loading order details: $e';
-        _isLoading = false;
-      });
+      if (!silent) {
+        setState(() {
+          _error = 'Error loading order details: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -123,9 +139,18 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         if (newStatus == 'confirmed' || newStatus == 'cancelled') {
           FirebaseMessagingService.stopOrderSound();
         }
-        setState(() {
-          _orderData!['status'] = newStatus;
-        });
+        // Accepting a delivery order can auto-assign a driver server-side —
+        // refetch the full order rather than patching just the status field
+        // locally, so the driver info shows up immediately without the
+        // admin needing to back out and re-open the screen.
+        if (newStatus == 'confirmed' && _isDeliveryOrder) {
+          await _loadOrderDetails(silent: true);
+        } else {
+          setState(() {
+            _orderData!['status'] = newStatus;
+          });
+        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Order status updated to $newStatus'),
@@ -184,8 +209,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               final isOnline = (driver['driverStatus'] as Map<String, dynamic>?)?['isOnline'] == true;
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: _brandPrimary.withOpacity(0.1),
-                  child: Icon(Icons.two_wheeler_rounded, color: _brandPrimary),
+                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  child: Icon(Icons.two_wheeler_rounded, color: AppColors.primary),
                 ),
                 title: Text('${driver['firstName'] ?? ''} ${driver['lastName'] ?? ''}'.trim()),
                 subtitle: Text(driver['phone'] ?? ''),
@@ -234,7 +259,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: _surfaceAlt,
+        backgroundColor: AppColors.surfaceAlt,
         appBar: AppBar(
           title: const Text('Order Details'),
         ),
@@ -267,7 +292,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (_error != null) {
       return Scaffold(
-        backgroundColor: _surfaceAlt,
+        backgroundColor: AppColors.surfaceAlt,
         appBar: AppBar(
           title: const Text('Order Details'),
         ),
@@ -312,7 +337,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final isTablet = _isTablet(context);
 
     return Scaffold(
-      backgroundColor: _surfaceAlt,
+      backgroundColor: AppColors.surfaceAlt,
       body: CustomScrollView(
         slivers: [
           _buildAppBar(context),
@@ -329,7 +354,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       _buildTabletLayout(context)
                     else
                       _buildMobileLayout(context),
-                    const SizedBox(height: 100),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -337,7 +362,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ),
         ],
       ),
-      floatingActionButton: _buildFloatingActions(context),
+      // Pinned above the keyboard/home-indicator instead of buried at the
+      // bottom of a scroll, so the primary action is always reachable —
+      // matches the accept/reject bar pattern from the reference designs.
+      bottomNavigationBar: SafeArea(
+        child: _buildBottomActionBar(context),
+      ),
     );
   }
 
@@ -363,7 +393,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ],
         ),
         _buildDriverAssignmentSection(context),
-        _buildActionButtons(context),
       ],
     );
   }
@@ -376,7 +405,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         _buildItemsList(context),
         _buildPricingDetails(context),
         _buildDriverAssignmentSection(context),
-        _buildActionButtons(context),
       ],
     );
   }
@@ -388,20 +416,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       margin: _getResponsivePadding(context),
       padding: _getCardPadding(context),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_brandPrimary, _brandSecondary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.18)),
-        boxShadow: [
-          BoxShadow(
-            color: _brandPrimary.withOpacity(0.25),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: AppColors.softShadow(),
       ),
       child: Column(
         children: [
@@ -434,26 +451,25 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ),
           ],
           SizedBox(height: isTablet ? 16 : 12),
-          const Divider(color: Colors.white38, thickness: 1),
+          const Divider(color: AppColors.divider, thickness: 1),
           SizedBox(height: isTablet ? 16 : 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'TOTAL',
+                'Total',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: _getResponsiveFontSize(context, 20),
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+                  color: AppColors.textDark,
+                  fontSize: _getResponsiveFontSize(context, 16),
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Text(
                 _formatAmount(_orderData!['total']),
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: _getResponsiveFontSize(context, 24),
-                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                  fontSize: _getResponsiveFontSize(context, 20),
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
@@ -470,14 +486,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white70,
+            color: AppColors.textMedium,
             fontSize: _getResponsiveFontSize(context, 14),
           ),
         ),
         Text(
           _formatAmount(amount),
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.textDark,
             fontSize: _getResponsiveFontSize(context, 14),
             fontWeight: FontWeight.w600,
           ),
@@ -487,73 +503,28 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Widget _buildAppBar(BuildContext context) {
-    final isTablet = _isTablet(context);
-
     return SliverAppBar(
-      expandedHeight: isTablet ? 250 : 200,
       pinned: true,
       elevation: 0,
-      backgroundColor: _brandPrimary,
+      scrolledUnderElevation: 0,
+      backgroundColor: AppColors.surface,
       surfaceTintColor: Colors.transparent,
-      flexibleSpace: FlexibleSpaceBar(
-        title: Text(
-          _orderData!['orderNumber'],
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontSize: isTablet ? 20 : 16,
+      foregroundColor: AppColors.textDark,
+      title: Text('#${_orderData!['orderNumber']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+      actions: [
+        Center(
+          child: Text(
+            _formatDateTime(DateTime.parse(_orderData!['createdAt'])),
+            style: const TextStyle(fontSize: 12.5, color: AppColors.textMedium, fontWeight: FontWeight.w500),
           ),
         ),
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [_brandPrimary, _brandSecondary],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(height: isTablet ? 60 : 40),
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 28 : 20,
-                  vertical: isTablet ? 14 : 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.25),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.access_time,
-                      color: Colors.white,
-                      size: isTablet ? 24 : 20,
-                    ),
-                    SizedBox(width: isTablet ? 12 : 8),
-                    Text(
-                      _formatDateTime(
-                        DateTime.parse(_orderData!['createdAt']),
-                      ),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: isTablet ? 16 : 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        const SizedBox(width: 4),
+        IconButton(
+          onPressed: _printOrder,
+          icon: const Icon(Icons.print_outlined, color: AppColors.textMedium, size: 22),
+          tooltip: 'Print receipt',
         ),
-      ),
+      ],
     );
   }
 
@@ -566,23 +537,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       padding: _getCardPadding(context),
       decoration: BoxDecoration(
         color: Colors.white,
-        gradient: LinearGradient(
-          colors: [Colors.white, _getStatusColor(status).withOpacity(0.04)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: _getStatusColor(status).withOpacity(0.22),
-          width: 1.4,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: AppColors.softShadow(),
       ),
       child: Column(
         children: [
@@ -591,16 +547,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             children: [
               Icon(
                 _getStatusIcon(status),
-                color: _getStatusColor(status),
+                color: AppColors.statusColor(status),
                 size: isTablet ? 40 : 32,
               ),
               SizedBox(width: isTablet ? 16 : 12),
               Text(
-                status.toUpperCase(),
+                AppColors.statusLabel(status),
                 style: TextStyle(
-                  fontSize: _getResponsiveFontSize(context, 24),
+                  fontSize: _getResponsiveFontSize(context, 22),
                   fontWeight: FontWeight.bold,
-                  color: _getStatusColor(status),
+                  color: AppColors.statusColor(status),
                 ),
               ),
             ],
@@ -616,12 +572,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 icon: _orderData!['deliveryType'] == 'delivery'
                     ? Icons.delivery_dining
                     : Icons.shopping_bag,
-                label: _orderData!['deliveryType'].toUpperCase(),
+                label: _prettyLabel(_orderData!['deliveryType']),
               ),
               _buildInfoChip(
                 context,
                 icon: Icons.payment,
-                label: _orderData!['paymentMethod'].toUpperCase(),
+                label: _prettyLabel(_orderData!['paymentMethod']),
               ),
             ],
           ),
@@ -639,36 +595,28 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: isTablet ? 20 : 16,
-        vertical: isTablet ? 12 : 8,
+        horizontal: isTablet ? 16 : 12,
+        vertical: isTablet ? 8 : 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppColors.chipBackground,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
-            size: isTablet ? 22 : 18,
-            color: const Color(0xFF4A148C),
+            size: isTablet ? 18 : 15,
+            color: AppColors.textMedium,
           ),
-          SizedBox(width: isTablet ? 10 : 8),
+          SizedBox(width: isTablet ? 8 : 6),
           Text(
             label,
             style: TextStyle(
-              fontSize: isTablet ? 14 : 12,
+              fontSize: isTablet ? 13 : 11.5,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF4A148C),
+              color: AppColors.textDark,
             ),
           ),
         ],
@@ -687,11 +635,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.04),
-            blurRadius: 14,
+            color: const Color(0xFF0F172A).withOpacity(0.05),
+            blurRadius: 16,
             offset: const Offset(0, 6),
           ),
         ],
@@ -704,12 +651,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _brandPrimary.withOpacity(0.08),
+                  color: AppColors.primary.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
                   Icons.person_outline_rounded,
-                  color: _brandPrimary,
+                  color: AppColors.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -741,6 +688,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             (user is Map ? user['phone'] : _orderData!['customerPhone']) ??
                 'N/A',
             isClickable: true,
+            onTap: () {
+              final phone = user is Map ? user['phone'] : _orderData!['customerPhone'];
+              if (phone != null && phone.toString().trim().isNotEmpty) {
+                _showContactOptions(context, phone.toString());
+              }
+            },
           ),
           if (_orderData!['branchId'] != null ||
               _orderData!['branchName'] != null) ...[
@@ -788,17 +741,18 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     String label,
     String value, {
     bool isClickable = false,
+    VoidCallback? onTap,
   }) {
     final isTablet = _isTablet(context);
 
-    return Container(
+    final row = Container(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Icon(
             icon,
             size: isTablet ? 24 : 20,
-            color: _brandPrimary,
+            color: AppColors.primary,
           ),
           SizedBox(width: isTablet ? 16 : 12),
           Expanded(
@@ -819,7 +773,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     fontSize: isTablet ? 16 : 14,
                     fontWeight: FontWeight.w600,
                     color: isClickable
-                        ? const Color(0xFF1E40AF)
+                        ? AppColors.primary
                         : const Color(0xFF0F172A),
                     decoration: isClickable ? TextDecoration.underline : null,
                   ),
@@ -827,9 +781,97 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ],
             ),
           ),
+          if (isClickable && onTap != null)
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textLight, size: 20),
         ],
       ),
     );
+
+    if (!isClickable || onTap == null) return row;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: row,
+      ),
+    );
+  }
+
+  /// Lets the admin reach the customer directly from the order — a plain
+  /// phone-number label with no action was a dead end before.
+  void _showContactOptions(BuildContext context, String phone) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 18),
+                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+              Text('Contact customer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+              const SizedBox(height: 4),
+              Text(phone, style: TextStyle(fontSize: 13.5, color: AppColors.textMedium)),
+              const SizedBox(height: 18),
+              _ContactOptionTile(
+                icon: Icons.call_rounded,
+                iconColor: AppColors.primary,
+                label: 'Call',
+                subtitle: phone,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _launchPhoneCall(phone);
+                },
+              ),
+              const SizedBox(height: 10),
+              _ContactOptionTile(
+                icon: Icons.chat_rounded,
+                iconColor: const Color(0xFF25D366),
+                label: 'WhatsApp',
+                subtitle: 'Open a chat',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _launchWhatsApp(phone);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _launchPhoneCall(String phone) async {
+    final uri = Uri(scheme: 'tel', path: phone.trim());
+    final launched = await launchUrl(uri);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the phone dialer')),
+      );
+    }
+  }
+
+  Future<void> _launchWhatsApp(String phone) async {
+    // wa.me wants digits only (country code, no '+', spaces or dashes).
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final uri = Uri.parse('https://wa.me/$digits');
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open WhatsApp')),
+      );
+    }
   }
 
   Widget _buildItemsList(BuildContext context) {
@@ -842,11 +884,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.04),
-            blurRadius: 14,
+            color: const Color(0xFF0F172A).withOpacity(0.05),
+            blurRadius: 16,
             offset: const Offset(0, 6),
           ),
         ],
@@ -859,12 +900,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _accent.withOpacity(0.1),
+                  color: AppColors.accent.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   Icons.receipt_long_rounded,
-                  color: _accent,
+                  color: AppColors.accent,
                   size: isTablet ? 22 : 20,
                 ),
               ),
@@ -932,16 +973,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     return Container(
       padding: EdgeInsets.all(isTablet ? 16 : 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -951,14 +984,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               Container(
                 padding: EdgeInsets.all(isTablet ? 12 : 8),
                 decoration: BoxDecoration(
-                  color: _accent.withOpacity(0.12),
+                  color: AppColors.accent.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '${item['quantity']}x',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: _accent,
+                    color: AppColors.accent,
                     fontSize: isTablet ? 16 : 14,
                   ),
                 ),
@@ -978,7 +1011,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 style: TextStyle(
                   fontSize: isTablet ? 18 : 16,
                   fontWeight: FontWeight.bold,
-                  color: _brandPrimary,
+                  color: AppColors.primary,
                 ),
               ),
             ],
@@ -1028,41 +1061,67 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
 
     final driver = _orderData!['deliveryAgent'] as Map<String, dynamic>?;
+    final isOnline = (driver?['driverStatus'] as Map<String, dynamic>?)?['isOnline'] == true;
     final isTablet = _isTablet(context);
 
     return Container(
       margin: EdgeInsets.fromLTRB(isTablet ? 24 : 16, 0, isTablet ? 24 : 16, isTablet ? 16 : 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: driver != null ? AppColors.primary.withOpacity(0.04) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: driver != null ? AppColors.primary.withOpacity(0.18) : const Color(0xFFE2E8F0)),
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: _brandPrimary.withOpacity(0.1),
-            child: Icon(Icons.two_wheeler_rounded, color: _brandPrimary),
+          Stack(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.two_wheeler_rounded, color: AppColors.primary, size: 22),
+              ),
+              if (driver != null)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isOnline ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  driver != null ? 'Delivery Driver' : 'No driver assigned',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF0F172A)),
+                  driver != null ? '${driver['firstName'] ?? ''} ${driver['lastName'] ?? ''}'.trim() : 'No driver assigned yet',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF0F172A)),
                 ),
-                if (driver != null)
-                  Text(
-                    '${driver['firstName'] ?? ''} ${driver['lastName'] ?? ''}'.trim(),
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                  )
-                else
-                  const Text(
-                    'Assign a driver to enable live GPS tracking',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                const SizedBox(height: 2),
+                Text(
+                  driver != null
+                      ? (isOnline ? 'Online · sharing live location' : 'Offline right now')
+                      : 'Assign a driver so this order shows up on their map',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: driver != null && isOnline ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                    fontWeight: driver != null && isOnline ? FontWeight.w600 : FontWeight.w400,
                   ),
+                ),
               ],
             ),
           ),
@@ -1070,40 +1129,76 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             onPressed: _assigningDriver ? null : _showAssignDriverDialog,
             child: _assigningDriver
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text(driver != null ? 'Change' : 'Assign'),
+                : Text(driver != null ? 'Change' : 'Assign', style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  /// Pinned action bar for the order-details screen (set as `bottomNavigationBar`
+  /// so it's reachable without scrolling). Pending orders get a split
+  /// Reject/Accept row — the pattern most admin order apps use for the
+  /// single decision that matters most — everything else gets one primary
+  /// action plus a cancel option below it.
+  Widget _buildBottomActionBar(BuildContext context) {
     final status = _orderData!['status'];
     final isTablet = _isTablet(context);
 
-    return Container(
-      margin: EdgeInsets.all(isTablet ? 24 : 16),
-      child: Column(
-        children: [
-          // PENDING -> CONFIRMED
-          if (status == 'pending') ...[
-            _buildActionButton(
-              context,
-              onPressed: () => _updateOrderStatus('confirmed'),
-              icon: Icons.check_circle,
-              label: 'ACCEPT ORDER',
-              color: Colors.green,
-            ),
-            SizedBox(height: isTablet ? 16 : 12),
-          ],
+    if (['delivered', 'cancelled', 'refunded'].contains(status)) {
+      return const SizedBox.shrink();
+    }
 
-          // CONFIRMED -> PREPARING
+    return Container(
+      padding: EdgeInsets.fromLTRB(isTablet ? 24 : 16, 14, isTablet ? 24 : 16, isTablet ? 20 : 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, -4))],
+      ),
+      child: status == 'pending' ? _buildPendingActions(context) : _buildInProgressActions(context, status),
+    );
+  }
+
+  Widget _buildPendingActions(BuildContext context) {
+    final isTablet = _isTablet(context);
+    return Row(
+      children: [
+        Expanded(
+          child: _buildActionButton(
+            context,
+            onPressed: () => _showCancelDialog(context),
+            icon: Icons.close_rounded,
+            label: 'Reject Order',
+            color: AppColors.danger,
+          ),
+        ),
+        SizedBox(width: isTablet ? 16 : 12),
+        Expanded(
+          child: _buildActionButton(
+            context,
+            onPressed: () => _updateOrderStatus('confirmed'),
+            icon: Icons.check_circle,
+            label: 'Accept Order',
+            color: Colors.green,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInProgressActions(BuildContext context, String status) {
+    final isTablet = _isTablet(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // CONFIRMED -> PREPARING
           if (status == 'confirmed') ...[
             _buildActionButton(
               context,
               onPressed: () => _updateOrderStatus('preparing'),
               icon: Icons.restaurant,
-              label: 'START PREPARING',
+              label: 'Start Preparing',
               color: Colors.blue,
             ),
             SizedBox(height: isTablet ? 16 : 12),
@@ -1115,7 +1210,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               context,
               onPressed: () => _updateOrderStatus('ready'),
               icon: Icons.done_all,
-              label: 'MARK AS READY',
+              label: 'Mark as Ready',
               color: Colors.green,
             ),
             SizedBox(height: isTablet ? 16 : 12),
@@ -1129,7 +1224,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 context,
                 onPressed: () => _showDriverPickupDialog(context),
                 icon: Icons.motorcycle,
-                label: 'DRIVER PICKED UP',
+                label: 'Driver Picked Up',
                 color: Colors.orange,
               ),
             ] else ...[
@@ -1138,7 +1233,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 context,
                 onPressed: () => _updateOrderStatus('delivered'),
                 icon: Icons.check_circle_outline,
-                label: 'CUSTOMER PICKED UP',
+                label: 'Customer Picked Up',
                 color: Colors.teal,
               ),
             ],
@@ -1152,7 +1247,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               context,
               onPressed: () => _updateOrderStatus('out-for-delivery'),
               icon: Icons.local_shipping,
-              label: 'OUT FOR DELIVERY',
+              label: 'Out for Delivery',
               color: Colors.indigo,
             ),
             SizedBox(height: isTablet ? 16 : 12),
@@ -1164,23 +1259,22 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               context,
               onPressed: () => _updateOrderStatus('delivered'),
               icon: Icons.check_circle,
-              label: 'MARK AS DELIVERED',
+              label: 'Mark as Delivered',
               color: Colors.teal,
             ),
             SizedBox(height: isTablet ? 16 : 12),
           ],
 
-          // CANCEL option for pending and confirmed orders only
-          if (['pending', 'confirmed'].contains(status)) ...[
-            _buildOutlinedButton(
-              context,
-              onPressed: () => _showCancelDialog(context),
-              icon: Icons.cancel,
-              label: 'CANCEL ORDER',
-            ),
-          ],
+          // Cancel stays available at every stage up until the order is
+          // actually delivered — matches what the backend already allows
+          // (PATCH /:id/cancel rejects only delivered/cancelled/refunded).
+          _buildOutlinedButton(
+            context,
+            onPressed: () => _showCancelDialog(context),
+            icon: Icons.cancel,
+            label: 'Cancel Order',
+          ),
         ],
-      ),
     );
   }
 
@@ -1203,7 +1297,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -1213,7 +1307,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
             ),
-            child: const Text('CONFIRM PICKUP'),
+            child: const Text('Confirm Pickup'),
           ),
         ],
       ),
@@ -1247,7 +1341,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('KEEP ORDER'),
+            child: const Text('Keep Order'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1267,7 +1361,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
             ),
-            child: const Text('CANCEL ORDER'),
+            child: const Text('Cancel Order'),
           ),
         ],
       ),
@@ -1375,52 +1469,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     );
   }
 
-  Widget _buildFloatingActions(BuildContext context) {
-    final isTablet = _isTablet(context);
-
-    return FloatingActionButton.extended(
-      onPressed: _printOrder,
-      icon: Icon(Icons.print, size: isTablet ? 24 : 20),
-      label: Text(
-        'PRINT',
-        style: TextStyle(fontSize: isTablet ? 16 : 14),
-      ),
-      backgroundColor: _brandPrimary,
-      foregroundColor: Colors.white,
-      heroTag: 'print',
-      elevation: 0,
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Colors.orange;
-      case 'confirmed':
-        return Colors.blue;
-      case 'preparing':
-        return Colors.purple;
-      case 'ready':
-        return Colors.green;
-      case 'pickup':
-        return Colors.orange.shade700;
-      case 'driverpickup':
-        return Colors.orange.shade700;
-      case 'shop':
-        return Colors.deepOrange;
-      case 'out-for-delivery':
-        return Colors.indigo;
-      case 'delivered':
-        return Colors.teal;
-      case 'cancelled':
-        return Colors.red;
-      case 'refunded':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
-  }
-
   IconData _getStatusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'pending':
@@ -1462,5 +1510,59 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
     }
+  }
+}
+
+class _ContactOptionTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ContactOptionTile({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceAlt,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(color: iconColor.withOpacity(0.12), shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: AppColors.textDark)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: const TextStyle(fontSize: 12.5, color: AppColors.textMedium)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.textLight, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
