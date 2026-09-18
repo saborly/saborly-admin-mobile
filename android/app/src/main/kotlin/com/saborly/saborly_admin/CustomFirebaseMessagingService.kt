@@ -18,7 +18,20 @@ class CustomFirebaseMessagingService : FlutterFirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
 
         val data = remoteMessage.data
-        val isNewOrder = data["type"] == "new_order" ||
+        val type = data["type"]
+
+        // An explicitly-typed message that ISN'T a new order (e.g.
+        // "delivery_completed") must never fall into the lenient legacy
+        // check below — otherwise every routine delivery-completed alert
+        // would also trigger the new-order ringing alarm.
+        if (type != null && type != "new_order") {
+            if (!isAppInForeground() && remoteMessage.notification == null) {
+                showGenericNotification(remoteMessage)
+            }
+            return
+        }
+
+        val isNewOrder = type == "new_order" ||
                 remoteMessage.notification?.title?.contains("Order", ignoreCase = true) == true ||
                 data["orderId"] != null
 
@@ -52,6 +65,47 @@ class CustomFirebaseMessagingService : FlutterFirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+    }
+
+    /// Plain (non-ringing) notification for message types other than
+    /// "new_order" — e.g. a driver completing/failing a delivery. Reuses
+    /// the same already-registered 'order_channel' as [showNotification].
+    private fun showGenericNotification(remoteMessage: RemoteMessage) {
+        val data = remoteMessage.data
+        val title = data["title"] ?: remoteMessage.notification?.title ?: "🔔 Order Update"
+        val body = data["body"] ?: remoteMessage.notification?.body ?: ""
+        val channelId = "order_channel"
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Order Notifications", NotificationManager.IMPORTANCE_HIGH).apply {
+                enableVibration(true)
+                enableLights(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("order_id", data["orderId"])
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 2, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .build()
+
+        notificationManager.notify(1003, notification)
     }
 
     private fun showNotification(remoteMessage: RemoteMessage) {

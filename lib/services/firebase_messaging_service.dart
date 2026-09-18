@@ -216,13 +216,19 @@ class FirebaseMessagingService {
     final body = message.notification?.body?.toLowerCase() ?? '';
     final type = data['type']?.toString().toLowerCase() ?? '';
 
-    // Check if this is a new order notification (more lenient check)
+    // Check if this is a new order notification. An explicitly-typed
+    // message that ISN'T a new order (e.g. "delivery_completed") must never
+    // fall into the lenient heuristic below — otherwise a routine
+    // delivery-completed alert would also trigger the new-order ringing
+    // alarm just because its body happens to contain the word "order".
+    // The lenient fallback only applies to legacy/untyped messages.
     bool isNewOrder = type == 'new_order' ||
         type == 'neworder' ||
-        title.contains('order') ||
-        title.contains('nuevo pedido') ||
-        body.contains('order') ||
-        data['orderId'] != null;
+        (type.isEmpty &&
+            (title.contains('order') ||
+                title.contains('nuevo pedido') ||
+                body.contains('order') ||
+                data['orderId'] != null));
 
     if (isNewOrder) {
       print('✅ Processing new order notification');
@@ -329,10 +335,14 @@ class FirebaseMessagingService {
   static Future<void> showOrderNotification(RemoteMessage message) async {
     final data = message.data;
 
-    // Get title and body from notification or data
+    // Get title and body from notification, then data (dataOnly messages
+    // carry their own title/body inside data — see firebaseAdmin.js), then
+    // a generic new-order fallback.
     final title = message.notification?.title ??
+        data['title'] ??
         '🔔 New Order ${data['orderNumber'] ?? ''}';
     final body = message.notification?.body ??
+        data['body'] ??
         'Order from ${data['customerName'] ?? 'Customer'} - €${data['total'] ?? '0.00'}';
 
     final androidDetails = AndroidNotificationDetails(
